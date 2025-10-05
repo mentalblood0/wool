@@ -14,14 +14,14 @@ module Wool
       @chest.set u.id, "", Wool.to_tj u
     end
 
-    def get(un : User::Name) : User?
-      Wool.from_tj User, (@chest.get (User.new un).id).not_nil! rescue nil
+    def get(ui : Id) : User?
+      Wool.from_tj User, (@chest.get ui).not_nil! rescue nil
     end
 
-    def delete(un : User::Name)
+    def delete(ui : Id)
       @chest.transaction do |tx|
-        tx.delete (User.new un).id
-        tx.where({"integration.user_id" => (User.new un).id.string}) { |ii| tx.delete ii }
+        tx.delete ui
+        tx.where({"integration.user_id" => ui.string}) { |ii| tx.delete ii }
       end
     end
 
@@ -41,8 +41,8 @@ module Wool
       @chest.delete i.id
     end
 
-    def add(un : User::Name, c : Wool::Command)
-      @chest.push (User.new un).id, "user.queue", Wool.to_tj c
+    def push(ui : Id, c : Wool::Command)
+      @chest.push ui, "user.queue", [JSON.parse c.to_json]
     end
   end
 end
