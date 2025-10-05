@@ -1,4 +1,4 @@
-# wool
+# 🐈‍⬛ wool
 
 Theses and relations storage collaboration service
 
@@ -11,5 +11,5 @@ shards build --production --release
 ## Usage
 
 ```bash
-./bin/cryama
+./bin/wool
 ```
