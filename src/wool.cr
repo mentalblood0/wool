@@ -1,0 +1,2 @@
+module Wool
+end

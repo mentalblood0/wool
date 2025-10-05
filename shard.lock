@@ -1,0 +1,22 @@
+version: 2.0
+shards:
+  dream:
+    git: https://github.com/mentalblood0/dream.git
+    version: 0.1.0+git.commit.7f534ccd69d5a31fc5c9a76f170164bba73141e4
+
+  sophia:
+    git: https://github.com/mentalblood0/sophia.git
+    version: 0.1.0+git.commit.5714860fd9c49b02407fd780702ecbafb9c5774d
+
+  trove:
+    git: https://github.com/mentalblood0/trove.git
+    version: 0.1.0+git.commit.e2048e61043e4bb196da56981d6059f1f75f2333
+
+  woollib:
+    git: https://github.com/mentalblood0/woollib.git
+    version: 0.1.0+git.commit.ea04912ec88379ad177996ecb14b2fabacb1a586
+
+  xxhash128:
+    git: https://github.com/mentalblood0/xxhash128.git
+    version: 0.1.0+git.commit.6c8a8ec64fad6eee465dc5a82de9c7e440d8c0c3
+
