@@ -8,15 +8,15 @@ module Wool
     class Integration
       mserializable
 
-      getter user_name : User::Name
+      getter user_id : Id
       getter site : Site
       getter pseudonym : String
 
-      def_equals_and_hash @user_name, @site, @pseudonym
+      def_equals_and_hash @user_id, @site, @pseudonym
 
       getter id : Id { Id.from_serializable self }
 
-      def initialize(@user_name, @site, @pseudonym)
+      def initialize(@user_id, @site, @pseudonym)
       end
     end
   end
