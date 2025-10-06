@@ -9,25 +9,28 @@ module Wool
 
     getter chest : Trove::Chest
 
-    def add(u : User)
+    def add(u : User) : Id
       raise Exception.new "User #{u.to_json} already exists" if @chest.has_key! u.id, "type"
       @chest.set u.id, "", Wool.to_tj u
+      u.id
     end
 
     def get(ui : Id) : User?
       Wool.from_tj User, (@chest.get ui).not_nil! rescue nil
     end
 
-    def delete(ui : Id)
+    def delete(ui : Id) : Id
       @chest.transaction do |tx|
         tx.delete ui
         tx.where({"integration.user_id" => ui.string}) { |ii| tx.delete ii }
       end
+      ui
     end
 
-    def add(i : Integration)
+    def add(i : Integration) : Id
       raise Exception.new "Integration #{i.to_json} already exists" if @chest.has_key! i.id, "type"
       @chest.set i.id, "", Wool.to_tj i
+      i.id
     end
 
     def get(s : Site, pseudonym : String) : User?
@@ -37,11 +40,12 @@ module Wool
       Wool.from_tj User, (@chest.get i.user_id).not_nil! rescue nil
     end
 
-    def delete(i : Integration)
+    def delete(i : Integration) : Id
       @chest.delete i.id
+      i.id
     end
 
-    def push(ui : Id, c : Wool::Command)
+    def push(ui : Id, c : Wool::Command) : UInt32
       @chest.push ui, "user.queue", [JSON.parse c.to_json]
     end
   end

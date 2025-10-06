@@ -10,11 +10,11 @@ shards:
 
   trove:
     git: https://github.com/mentalblood0/trove.git
-    version: 0.1.0+git.commit.e2048e61043e4bb196da56981d6059f1f75f2333
+    version: 0.1.0+git.commit.730326f8d679dd47ee827d123fc15b1e841770b9
 
   woollib:
     git: https://github.com/mentalblood0/woollib.git
-    version: 0.1.0+git.commit.ea04912ec88379ad177996ecb14b2fabacb1a586
+    version: 0.1.0+git.commit.8fa65e01788e8c685343e284676cc17c56d4cc7e
 
   xxhash128:
     git: https://github.com/mentalblood0/xxhash128.git
