@@ -15,12 +15,12 @@ module Wool
     end
 
     enum Error
-      IntegrationNotFound   = 0
+      PseudonymNotFound     = 0
       OperationNotPermitted = 1
     end
 
     def answer(s : Users::Site, pseudonym : String, c : Command(Sweater) | Command(Users))
-      u = (@users.get s, pseudonym).not_nil! rescue return Error::IntegrationNotFound
+      u = (@users.get s, pseudonym).not_nil! rescue return Error::PseudonymNotFound
       case u.role
       when User::Role::User
         case c

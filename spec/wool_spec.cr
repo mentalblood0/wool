@@ -4,7 +4,7 @@ require "../src/users/User"
 require "../src/users/Users"
 require "../src/Service"
 require "../src/Command"
-require "../src/users/Integration"
+require "../src/users/Pseudonym"
 
 alias Config = {service: Wool::Service}
 
@@ -18,7 +18,7 @@ describe Wool do
       users.add u
       (users.get u.id).should eq u
 
-      i = Wool::Users::Integration.new u.id, Wool::Users::Site::Telegram, "telegramid"
+      i = Wool::Users::Pseudonym.new u.id, Wool::Users::Site::Telegram, "telegramid"
       users.add i
       (users.get Wool::Users::Site::Telegram, "telegramid").should eq u
       users.delete u.id
@@ -51,9 +51,9 @@ describe Wool do
       users.add uu
       users.add um
 
-      iuu = Wool::Users::Integration.new uu.id, Wool::Users::Site::Telegram, "iuu"
+      iuu = Wool::Users::Pseudonym.new uu.id, Wool::Users::Site::Telegram, "iuu"
       users.add iuu
-      ium = Wool::Users::Integration.new um.id, Wool::Users::Site::Telegram, "ium"
+      ium = Wool::Users::Pseudonym.new um.id, Wool::Users::Site::Telegram, "ium"
       users.add ium
 
       un = Wool::User.new (Wool::User::Name.new "new"), Wool::User::Role::User
@@ -68,8 +68,8 @@ describe Wool do
       (service.answer Wool::Users::Site::Telegram, "iuu", Wool::Command::Get.new({id: cr.id})).should eq cr
       (service.answer Wool::Users::Site::Telegram, "ium", Wool::Command::Get.new({id: cr.id})).should eq cr
 
-      (service.answer Wool::Users::Site::Telegram, "nonexistent", c).should eq Wool::Service::Error::IntegrationNotFound
-      (service.answer Wool::Users::Site::Max, "iuu", c).should eq Wool::Service::Error::IntegrationNotFound
+      (service.answer Wool::Users::Site::Telegram, "nonexistent", c).should eq Wool::Service::Error::PseudonymNotFound
+      (service.answer Wool::Users::Site::Max, "iuu", c).should eq Wool::Service::Error::PseudonymNotFound
     end
   end
 end
