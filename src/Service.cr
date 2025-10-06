@@ -15,18 +15,29 @@ module Wool
     end
 
     enum Error
-      UserIntegrationNotFound = 0
-      OperationNotPermitted   = 1
+      IntegrationNotFound   = 0
+      OperationNotPermitted = 1
     end
 
     def answer(s : Users::Site, pseudonym : String, c : Command(Sweater) | Command(Users))
-      u = (@users.get s, pseudonym).not_nil! rescue return Error::UserIntegrationNotFound
-      case c
-      when Command(Sweater)
-        return @users.push u.id, c
-      when Command(Users)
-        return Error::OperationNotPermitted unless u.role == User::Role::Moderator
-        return c.exec @users
+      u = (@users.get s, pseudonym).not_nil! rescue return Error::IntegrationNotFound
+      case u.role
+      when User::Role::User
+        case c
+        when Command::Get, Command::GetRelations, Command::GetByTags
+          return c.exec @sweater
+        when Command(Users)
+          return Error::OperationNotPermitted
+        else
+          return @users.push u.id, c
+        end
+      when User::Role::Moderator
+        case c
+        when Command(Sweater)
+          return c.exec @sweater
+        when Command(Users)
+          return c.exec @users
+        end
       end
     end
   end

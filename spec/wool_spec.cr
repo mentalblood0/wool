@@ -60,6 +60,16 @@ describe Wool do
       c = Wool::Command::AddUser.new({u: un})
       (service.answer Wool::Users::Site::Telegram, "iuu", c).should eq Wool::Service::Error::OperationNotPermitted
       (service.answer Wool::Users::Site::Telegram, "ium", c).should eq un.id
+
+      t = Wool::Text.new "text"
+      c = Wool::Command::Add.new({c: t})
+      (service.answer Wool::Users::Site::Telegram, "iuu", c).should eq 0_u32
+      cr = (service.answer Wool::Users::Site::Telegram, "ium", c).as Wool::Thesis
+      (service.answer Wool::Users::Site::Telegram, "iuu", Wool::Command::Get.new({id: cr.id})).should eq cr
+      (service.answer Wool::Users::Site::Telegram, "ium", Wool::Command::Get.new({id: cr.id})).should eq cr
+
+      (service.answer Wool::Users::Site::Telegram, "nonexistent", c).should eq Wool::Service::Error::IntegrationNotFound
+      (service.answer Wool::Users::Site::Max, "iuu", c).should eq Wool::Service::Error::IntegrationNotFound
     end
   end
 end
