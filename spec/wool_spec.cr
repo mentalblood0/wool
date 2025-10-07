@@ -34,10 +34,8 @@ describe Wool do
       users.add u
 
       c = Wool::Command::Add.new({c: Wool::Text.new "text"})
-      users.push u.id, c
-
-      u = (users.get u.id).not_nil!
-      u.queue.should eq [c]
+      q = users.push u.id, c
+      users.pull.should eq [q]
 
       users.delete u.id
     end
@@ -63,7 +61,7 @@ describe Wool do
 
       t = Wool::Text.new "text"
       c = Wool::Command::Add.new({c: t})
-      (service.answer Wool::Users::Site::Telegram, "iuu", c).should eq 0_u32
+      (service.answer Wool::Users::Site::Telegram, "iuu", c).should eq Wool::Users::Queued.new uu.id, c
       cr = (service.answer Wool::Users::Site::Telegram, "ium", c).as Wool::Thesis
       (service.answer Wool::Users::Site::Telegram, "iuu", Wool::Command::Get.new({id: cr.id})).should eq cr
       (service.answer Wool::Users::Site::Telegram, "ium", Wool::Command::Get.new({id: cr.id})).should eq cr

@@ -14,7 +14,7 @@ shards:
 
   woollib:
     git: https://github.com/mentalblood0/woollib.git
-    version: 0.1.0+git.commit.8a97bb471f373f5f18530a7b97ece12d7471fd1c
+    version: 0.1.0+git.commit.7fb42a899992c26b6cd4232c0329aeab646266f6
 
   xxhash128:
     git: https://github.com/mentalblood0/xxhash128.git

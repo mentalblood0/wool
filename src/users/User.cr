@@ -30,13 +30,12 @@ module Wool
 
     getter name : Name
     getter role : Role
-    getter queue : Array(Command(Sweater) | Command(Users)) = [] of Command(Sweater) | Command(Users)
 
     def_equals_and_hash @name
 
     getter id : Id { Id.from_serializable @name }
 
-    def initialize(@name, @role = Role::User, @queue = [] of Command(Sweater) | Command(Users))
+    def initialize(@name, @role = Role::User)
     end
   end
 end

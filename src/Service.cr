@@ -17,9 +17,10 @@ module Wool
     enum Error
       PseudonymNotFound     = 0
       OperationNotPermitted = 1
+      UnknownCommand        = 2
     end
 
-    def answer(s : Users::Site, pseudonym : String, c : Command(Sweater) | Command(Users))
+    def answer(s : Users::Site, pseudonym : String, c : Command)
       u = (@users.get s, pseudonym).not_nil! rescue return Error::PseudonymNotFound
       case u.role
       when User::Role::User
@@ -39,6 +40,7 @@ module Wool
           return c.exec @users
         end
       end
+      Error::UnknownCommand
     end
   end
 end
