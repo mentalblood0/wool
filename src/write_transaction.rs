@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Error, Result};
 use fallible_iterator::FallibleIterator;
-use trove::{path_segments, IndexRecordType, Object, ObjectId};
+use trove::{path_segments, Document, DocumentId, IndexRecordType};
 
 use crate::alias::Alias;
+use crate::chest::woollib_chest;
 use crate::commands::Command;
 use crate::content::Content;
 use crate::define_read_methods;
@@ -13,7 +14,7 @@ use crate::tag::Tag;
 use crate::thesis::Thesis;
 
 pub struct WriteTransaction<'a, 'b, 'c, 'd> {
-    pub chest_transaction: &'a mut trove::WriteTransaction<'b, 'c, 'd>,
+    pub chest_transaction: &'a mut woollib_chest::WriteTransaction<'b, 'c, 'd>,
     pub sweater_config: SweaterConfig,
 }
 
@@ -28,10 +29,13 @@ impl<'a, 'b, 'c, 'd> ReadTransactionMethods<'a> for &mut WriteTransaction<'a, 'b
 impl WriteTransaction<'_, '_, '_, '_> {
     pub fn insert_thesis(&mut self, thesis: Thesis) -> Result<()> {
         let thesis_id = thesis.id()?;
-        if self.chest_transaction.contains_object_with_id(&thesis_id)? {
+        if self
+            .chest_transaction
+            .theses_contains_document_with_id(&thesis_id)?
+        {
             Err(anyhow!(
                 "Can not insert thesis {thesis:?} with id {thesis_id:?} as chest already contains \
-                 object with such id"
+                 document with such id"
             ))
         } else {
             if let Content::Relation(Relation {
@@ -54,7 +58,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
                 for related_id in [from_id, to_id] {
                     if self
                         .chest_transaction
-                        .get(&related_id, &path_segments!("content"))?
+                        .theses_get(&related_id, &path_segments!("content"))?
                         .is_none()
                     {
                         return Err(anyhow!(
@@ -64,7 +68,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
                     }
                 }
             }
-            self.chest_transaction.insert_with_id(Object {
+            self.chest_transaction.theses_insert_with_id(Document {
                 id: thesis_id,
                 value: serde_json::to_value(thesis.clone())?,
             })?;
@@ -72,13 +76,13 @@ impl WriteTransaction<'_, '_, '_, '_> {
         }
     }
 
-    pub fn tag_thesis(&mut self, thesis_id: &ObjectId, tag: Tag) -> Result<()> {
-        if !self.chest_transaction.contains_element(
+    pub fn tag_thesis(&mut self, thesis_id: &DocumentId, tag: Tag) -> Result<()> {
+        if !self.chest_transaction.theses_contains_element(
             thesis_id,
             &path_segments!("tags"),
             &serde_json::to_value(tag.clone())?.try_into()?,
         )? {
-            self.chest_transaction.push(
+            self.chest_transaction.theses_push(
                 thesis_id,
                 &path_segments!("tags"),
                 serde_json::to_value(tag)?,
@@ -87,25 +91,28 @@ impl WriteTransaction<'_, '_, '_, '_> {
         Ok(())
     }
 
-    pub fn untag_thesis(&mut self, thesis_id: &ObjectId, tag: &Tag) -> Result<()> {
-        if let Some(tag_index_in_array) = self.chest_transaction.get_element_index(
+    pub fn untag_thesis(&mut self, thesis_id: &DocumentId, tag: &Tag) -> Result<()> {
+        if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
             thesis_id,
             &path_segments!("tags"),
             &serde_json::to_value(tag)?.try_into()?,
         )? {
             self.chest_transaction
-                .remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
+                .theses_remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
         }
         Ok(())
     }
 
-    pub fn remove_thesis(&mut self, thesis_id: &ObjectId) -> Result<()> {
-        if self.chest_transaction.contains_object_with_id(thesis_id)? {
-            self.chest_transaction.remove(thesis_id, &vec![])?;
+    pub fn remove_thesis(&mut self, thesis_id: &DocumentId) -> Result<()> {
+        if self
+            .chest_transaction
+            .theses_contains_document_with_id(thesis_id)?
+        {
+            self.chest_transaction.theses_remove(thesis_id, &vec![])?;
             let thesis_id_json_value = serde_json::to_value(thesis_id)?;
             let relations_ids = self
                 .chest_transaction
-                .select(
+                .theses_select(
                     &vec![(
                         IndexRecordType::Direct,
                         path_segments!("content", "Relation", "from"),
@@ -114,7 +121,7 @@ impl WriteTransaction<'_, '_, '_, '_> {
                     &vec![],
                     None,
                 )?
-                .chain(self.chest_transaction.select(
+                .chain(self.chest_transaction.theses_select(
                     &vec![(
                         IndexRecordType::Direct,
                         path_segments!("content", "Relation", "to"),
@@ -125,7 +132,8 @@ impl WriteTransaction<'_, '_, '_, '_> {
                 )?)
                 .collect::<Vec<_>>()?;
             for relation_id in relations_ids {
-                self.chest_transaction.remove(&relation_id, &vec![])?;
+                self.chest_transaction
+                    .theses_remove(&relation_id, &vec![])?;
             }
             let where_mentioned = self.where_referenced(thesis_id)?;
             for id_of_thesis_where_mentioned in where_mentioned {
@@ -135,8 +143,8 @@ impl WriteTransaction<'_, '_, '_, '_> {
         Ok(())
     }
 
-    pub fn set_alias(&mut self, thesis_id: ObjectId, new_alias: Alias) -> Result<()> {
-        self.chest_transaction.update(
+    pub fn set_alias(&mut self, thesis_id: DocumentId, new_alias: Alias) -> Result<()> {
+        self.chest_transaction.theses_update(
             thesis_id,
             path_segments!("alias"),
             serde_json::to_value(new_alias)?,

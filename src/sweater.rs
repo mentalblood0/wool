@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use trove::{Chest, ChestConfig};
 
+use crate::chest::woollib_chest::{Chest, ChestConfig};
 use crate::read_transaction::ReadTransaction;
 use crate::relation::RelationKind;
 use crate::write_transaction::WriteTransaction;

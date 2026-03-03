@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use trove::ObjectId;
+use trove::DocumentId;
 
 use crate::alias::Alias;
 use crate::aliases_resolver::AliasesResolver;
@@ -36,7 +36,7 @@ pub struct Text {
     #[serde(default)]
     pub raw_text_parts: Vec<RawText>,
     #[serde(default)]
-    pub references: Vec<ObjectId>,
+    pub references: Vec<DocumentId>,
     pub start_with_reference: bool,
 }
 

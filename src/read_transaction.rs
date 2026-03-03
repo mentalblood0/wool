@@ -1,31 +1,34 @@
 use anyhow::{Error, Result};
 use fallible_iterator::FallibleIterator;
-use trove::{path_segments, IndexRecordType, ObjectId};
+use trove::{path_segments, DocumentId, IndexRecordType};
 
 use crate::alias::Alias;
+use crate::chest::woollib_chest;
 use crate::sweater::SweaterConfig;
 use crate::thesis::Thesis;
 
 pub struct ReadTransaction<'a> {
-    pub chest_transaction: &'a trove::ReadTransaction<'a>,
+    pub chest_transaction: &'a woollib_chest::ReadTransaction<'a>,
     pub sweater_config: &'a SweaterConfig,
 }
 
 #[macro_export]
 macro_rules! define_read_methods {
     ($lifetime:lifetime) => {
-        fn get_thesis(&self, thesis_id: &ObjectId) -> Result<Option<Thesis>> {
-            if let Some(thesis_json_value) = self.chest_transaction.get(thesis_id, &vec![])? {
+        fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>> {
+            if let Some(thesis_json_value) =
+                self.chest_transaction.theses_get(thesis_id, &vec![])?
+            {
                 Ok(Some(serde_json::from_value(thesis_json_value).unwrap()))
             } else {
                 Ok(None)
             }
         }
 
-        fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<ObjectId>> {
+        fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>> {
             Ok(self
                 .chest_transaction
-                .select(
+                .theses_select(
                     &vec![(
                         IndexRecordType::Direct,
                         path_segments!("alias"),
@@ -37,10 +40,10 @@ macro_rules! define_read_methods {
                 .next()?)
         }
 
-        fn where_referenced(&self, thesis_id: &ObjectId) -> Result<Vec<ObjectId>> {
+        fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>> {
             let json_value = serde_json::to_value(thesis_id)?;
             self.chest_transaction
-                .select(
+                .theses_select(
                     &vec![(
                         IndexRecordType::Array,
                         path_segments!("content", "Text", "references"),
@@ -49,7 +52,7 @@ macro_rules! define_read_methods {
                     &vec![],
                     None,
                 )?
-                .chain(self.chest_transaction.select(
+                .chain(self.chest_transaction.theses_select(
                     &vec![(
                         IndexRecordType::Direct,
                         path_segments!("content", "Relation", "from"),
@@ -58,7 +61,7 @@ macro_rules! define_read_methods {
                     &vec![],
                     None,
                 )?)
-                .chain(self.chest_transaction.select(
+                .chain(self.chest_transaction.theses_select(
                     &vec![(
                         IndexRecordType::Direct,
                         path_segments!("content", "Relation", "to"),
@@ -70,11 +73,11 @@ macro_rules! define_read_methods {
                 .collect()
         }
 
-        fn get_alias_by_thesis_id(&self, thesis_id: &ObjectId) -> Result<Option<Alias>> {
+        fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>> {
             Ok(
                 if let Some(json_value) = self
                     .chest_transaction
-                    .get(thesis_id, &path_segments!("alias"))?
+                    .theses_get(thesis_id, &path_segments!("alias"))?
                 {
                     serde_json::from_value(json_value)?
                 } else {
@@ -86,20 +89,18 @@ macro_rules! define_read_methods {
         fn iter_theses(
             &self,
         ) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>> {
-            Ok(Box::new(
-                self.chest_transaction
-                    .objects()?
-                    .map(|object| Ok(serde_json::from_value(object.value)?)),
-            ))
+            Ok(Box::new(self.chest_transaction.theses_documents()?.map(
+                |document| Ok(serde_json::from_value(document.value)?),
+            )))
         }
     };
 }
 
 pub trait ReadTransactionMethods<'a> {
-    fn get_thesis(&self, thesis_id: &ObjectId) -> Result<Option<Thesis>>;
-    fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<ObjectId>>;
-    fn get_alias_by_thesis_id(&self, thesis_id: &ObjectId) -> Result<Option<Alias>>;
-    fn where_referenced(&self, thesis_id: &ObjectId) -> Result<Vec<ObjectId>>;
+    fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>>;
+    fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>>;
+    fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>>;
+    fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>>;
     fn iter_theses(&self) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>>;
 }
 

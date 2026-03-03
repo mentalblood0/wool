@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use trove::ObjectId;
+use trove::DocumentId;
 
 use crate::alias::Alias;
 use crate::content::Content;
@@ -18,7 +18,7 @@ pub struct Thesis {
 }
 
 impl Thesis {
-    pub fn id(&self) -> Result<ObjectId> {
+    pub fn id(&self) -> Result<DocumentId> {
         self.content.id()
     }
 
@@ -33,7 +33,7 @@ impl Thesis {
         Ok(self)
     }
 
-    pub fn references(&self) -> Vec<ObjectId> {
+    pub fn references(&self) -> Vec<DocumentId> {
         match self.content {
             Content::Text(Text {
                 raw_text_parts: _,

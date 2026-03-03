@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use trove::ObjectId;
+use trove::DocumentId;
 
 use crate::relation::Relation;
 use crate::text::Text;
@@ -12,7 +12,7 @@ pub enum Content {
 }
 
 impl Content {
-    pub fn id(&self) -> Result<ObjectId> {
+    pub fn id(&self) -> Result<DocumentId> {
         let source = match self {
             Content::Text(text) => text.composed().bytes().collect(),
             Content::Relation(relation) => {
@@ -20,13 +20,13 @@ impl Content {
                     || {
                         format!(
                             "Can not binary encode Content {self:?} in order to compute it's \
-                             ObjectId as it's binary representation hash"
+                             DocumentId as it's binary representation hash"
                         )
                     },
                 )?
             }
         };
-        Ok(ObjectId {
+        Ok(DocumentId {
             value: xxhash_rust::xxh3::xxh3_128(&source).to_be_bytes(),
         })
     }

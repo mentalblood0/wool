@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use trove::ObjectId;
+use trove::DocumentId;
 
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RelationKind(pub String);
@@ -28,8 +28,8 @@ impl RelationKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
 pub struct Relation {
-    pub from: ObjectId,
-    pub to: ObjectId,
+    pub from: DocumentId,
+    pub to: DocumentId,
     pub kind: RelationKind,
 }
 

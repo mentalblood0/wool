@@ -1,5 +1,6 @@
 pub mod alias;
 pub mod aliases_resolver;
+pub mod chest;
 pub mod commands;
 pub mod content;
 pub mod graph_generator;
@@ -20,7 +21,7 @@ mod tests {
     use fallible_iterator::FallibleIterator;
     use nanorand::{Rng, WyRand};
     use pretty_assertions::assert_eq;
-    use trove::ObjectId;
+    use trove::DocumentId;
 
     use crate::aliases_resolver::AliasesResolver;
     use crate::commands::CommandsIterator;
@@ -50,7 +51,7 @@ mod tests {
 
     fn random_text(
         rng: &mut WyRand,
-        previously_added_theses: &BTreeMap<ObjectId, Thesis>,
+        previously_added_theses: &BTreeMap<DocumentId, Thesis>,
         aliases_resolver: &mut AliasesResolver,
     ) -> Text {
         const ENGLISH_LETTERS: [&str; 26] = [
@@ -124,7 +125,7 @@ mod tests {
     fn random_thesis(
         rng: &mut WyRand,
         aliases_resolver: &mut AliasesResolver,
-        previously_added_theses: &BTreeMap<ObjectId, Thesis>,
+        previously_added_theses: &BTreeMap<DocumentId, Thesis>,
         transaction: &WriteTransaction,
     ) -> Thesis {
         Thesis {
@@ -174,7 +175,7 @@ mod tests {
 
         sweater
             .lock_all_and_write(|transaction| {
-                let mut previously_added_theses: BTreeMap<ObjectId, Thesis> = BTreeMap::new();
+                let mut previously_added_theses: BTreeMap<DocumentId, Thesis> = BTreeMap::new();
                 for _ in 0..1000 {
                     let action_id = if previously_added_theses.is_empty() {
                         1

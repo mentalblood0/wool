@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Error, Result};
 use fallible_iterator::FallibleIterator;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use trove::ObjectId;
+use trove::DocumentId;
 
 use crate::alias::Alias;
 use crate::aliases_resolver::AliasesResolver;
@@ -17,7 +17,7 @@ use crate::thesis::Thesis;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reference {
     Alias(Alias),
-    ObjectId(ObjectId),
+    DocumentId(DocumentId),
 }
 
 impl Reference {
@@ -25,7 +25,7 @@ impl Reference {
         if let Ok(alias) = Alias(input.to_string()).validated() {
             Ok(Self::Alias(alias.to_owned()))
         } else {
-            Ok(Self::ObjectId(serde_json::from_value(
+            Ok(Self::DocumentId(serde_json::from_value(
                 serde_json::Value::String(input.to_string()),
             )?))
         }
@@ -35,10 +35,10 @@ impl Reference {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     AddThesis(Thesis),
-    RemoveThesis(ObjectId),
-    AddTags(ObjectId, Vec<Tag>),
-    RemoveTags(ObjectId, Vec<Tag>),
-    SetAlias(ObjectId, Alias),
+    RemoveThesis(DocumentId),
+    AddTags(DocumentId, Vec<Tag>),
+    RemoveTags(DocumentId, Vec<Tag>),
+    SetAlias(DocumentId, Alias),
 }
 
 impl Command {

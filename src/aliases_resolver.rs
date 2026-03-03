@@ -1,18 +1,18 @@
 use anyhow::{anyhow, Result};
 use std::collections::BTreeMap;
-use trove::ObjectId;
+use trove::DocumentId;
 
 use crate::{alias::Alias, commands::Reference, read_transaction::ReadTransactionMethods};
 
 pub struct AliasesResolver<'a> {
     pub read_able_transaction: &'a dyn ReadTransactionMethods<'a>,
-    pub known_aliases: BTreeMap<Alias, ObjectId>,
+    pub known_aliases: BTreeMap<Alias, DocumentId>,
 }
 
 impl<'a> AliasesResolver<'a> {
-    pub fn get_thesis_id_by_reference(&self, reference: &Reference) -> Result<ObjectId> {
+    pub fn get_thesis_id_by_reference(&self, reference: &Reference) -> Result<DocumentId> {
         Ok(match reference {
-            Reference::ObjectId(thesis_id) => {
+            Reference::DocumentId(thesis_id) => {
                 if self.read_able_transaction.get_thesis(thesis_id)?.is_none() {
                     return Err(anyhow!("Can not find thesis with id {thesis_id:?}"));
                 }
@@ -30,8 +30,8 @@ impl<'a> AliasesResolver<'a> {
         })
     }
 
-    pub fn remember(&mut self, alias: Alias, object_id: ObjectId) -> &Self {
-        self.known_aliases.insert(alias, object_id);
+    pub fn remember(&mut self, alias: Alias, document_id: DocumentId) -> &Self {
+        self.known_aliases.insert(alias, document_id);
         self
     }
 }
