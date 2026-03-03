@@ -3,7 +3,7 @@ use fallible_iterator::FallibleIterator;
 use trove::{path_segments, Document, DocumentId, IndexRecordType};
 
 use crate::alias::Alias;
-use crate::chest::woollib_chest;
+use crate::chest::wool_chest;
 use crate::commands::Command;
 use crate::content::Content;
 use crate::define_read_methods;
@@ -14,7 +14,7 @@ use crate::tag::Tag;
 use crate::thesis::Thesis;
 
 pub struct WriteTransaction<'a, 'b, 'c, 'd> {
-    pub chest_transaction: &'a mut woollib_chest::WriteTransaction<'b, 'c, 'd>,
+    pub chest_transaction: &'a mut wool_chest::WriteTransaction<'b, 'c, 'd>,
     pub sweater_config: SweaterConfig,
 }
 

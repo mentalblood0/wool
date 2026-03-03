@@ -289,7 +289,7 @@ mod tests {
                 }
 
                 std::fs::write(
-                    "/tmp/woollib_example_graph.dot",
+                    "/tmp/wool_example_graph.dot",
                     GraphGenerator::new(
                         &GraphGeneratorConfig {
                             wrap_width: 64,

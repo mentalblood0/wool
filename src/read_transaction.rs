@@ -3,12 +3,12 @@ use fallible_iterator::FallibleIterator;
 use trove::{path_segments, DocumentId, IndexRecordType};
 
 use crate::alias::Alias;
-use crate::chest::woollib_chest;
+use crate::chest::wool_chest;
 use crate::sweater::SweaterConfig;
 use crate::thesis::Thesis;
 
 pub struct ReadTransaction<'a> {
-    pub chest_transaction: &'a woollib_chest::ReadTransaction<'a>,
+    pub chest_transaction: &'a wool_chest::ReadTransaction<'a>,
     pub sweater_config: &'a SweaterConfig,
 }
 
