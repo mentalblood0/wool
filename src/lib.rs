@@ -2,6 +2,7 @@ use trove::PathSegment;
 
 pub extern crate anyhow;
 pub extern crate fallible_iterator;
+pub extern crate html_escape;
 pub extern crate regex;
 pub extern crate serde;
 pub extern crate trove;
@@ -20,6 +21,7 @@ macro_rules! define_sweater {
                 std::collections::{BTreeSet, BTreeMap},
                 trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
                 $crate::{trove::define_chest,
+                    html_escape::encode_text,
                     fallible_iterator::FallibleIterator,
                     serde::{Deserialize, Serialize},
                     trove::Document,
@@ -1063,7 +1065,7 @@ macro_rules! define_sweater {
                             if let Some(thesis) = self.theses_iterator.next()? {
                                 let thesis_id_string = thesis.id()?.to_string();
                                 let node_header_text = if let Some(ref alias) = thesis.alias {
-                                    html_escape::encode_text(&alias.0).to_string()
+                                    encode_text(&alias.0).to_string()
                                 } else {
                                     thesis_id_string.clone()
                                 };
