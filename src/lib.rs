@@ -23,7 +23,7 @@ macro_rules! define_sweater {
                 trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
                 $crate::{trove::define_chest,
                     html_escape::encode_text,
-                    bincode::encode_to_vec,
+                    bincode::{Encode, encode_to_vec},
                     fallible_iterator::FallibleIterator,
                     serde::{Deserialize, Serialize},
                     trove::Document,
@@ -716,7 +716,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
+            #[derive(Serialize, Deserialize, Debug, Clone, Encode, PartialEq, Eq)]
             pub struct Relation {
                 pub from: DocumentId,
                 pub to: DocumentId,
