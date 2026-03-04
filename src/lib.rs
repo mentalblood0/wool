@@ -23,7 +23,7 @@ macro_rules! define_sweater {
                 trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
                 $crate::{trove::define_chest,
                     html_escape::encode_text,
-                    bincode::{Encode, encode_to_vec, config},
+                    bincode::{self, Encode, encode_to_vec, config},
                     fallible_iterator::FallibleIterator,
                     serde::{Deserialize, Serialize},
                     trove::Document,
