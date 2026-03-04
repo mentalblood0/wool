@@ -1,12 +1,13 @@
 use trove::PathSegment;
 
 pub extern crate anyhow;
-pub extern crate bincode;
 pub extern crate fallible_iterator;
 pub extern crate html_escape;
 pub extern crate regex;
 pub extern crate serde;
 pub extern crate trove;
+
+pub use trove::bincode;
 
 #[macro_export]
 macro_rules! define_sweater {
@@ -694,6 +695,7 @@ macro_rules! define_sweater {
             }
 
             #[derive(Serialize, Deserialize, Debug, Clone, Encode, PartialEq, Eq, PartialOrd, Ord)]
+            #[bincode(crate = "bincode")]
             pub struct RelationKind(pub String);
 
             impl RelationKind {
@@ -717,6 +719,7 @@ macro_rules! define_sweater {
             }
 
             #[derive(Serialize, Deserialize, Debug, Clone, Encode, PartialEq, Eq)]
+            #[bincode(crate = "bincode")]
             pub struct Relation {
                 pub from: DocumentId,
                 pub to: DocumentId,
