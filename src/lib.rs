@@ -104,7 +104,6 @@ macro_rules! define_sweater {
                 pub sweater_config: &'a SweaterConfig,
             }
 
-            #[macro_export]
             macro_rules! define_read_methods {
                 ($lifetime:lifetime) => {
                     fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>> {
