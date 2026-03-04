@@ -1,5 +1,3 @@
-use trove::PathSegment;
-
 pub extern crate anyhow;
 pub extern crate fallible_iterator;
 pub extern crate html_escape;
@@ -21,8 +19,8 @@ macro_rules! define_sweater {
         pub mod $sweater_name {
             use {
                 std::collections::{BTreeSet, BTreeMap},
-                trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
-                $crate::{trove::define_chest,
+                $crate::{
+                    trove::{define_chest, path_segments, DocumentId, IndexRecordType},
                     html_escape::encode_text,
                     bincode::{self, Encode, encode_to_vec, config},
                     fallible_iterator::FallibleIterator,
