@@ -1132,6 +1132,7 @@ macro_rules! define_sweater {
 #[cfg(test)]
 mod tests {
     define_sweater!(test_sweater(
+        users
     ) use {
     });
 

@@ -112,7 +112,7 @@ checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 [[package]]
 name = "dream"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/dream#fb003ff420dad829b188a0af1936a671e727e169"
+source = "git+https://github.com/mentalblood0/dream#ef3188ce23133c65b7cf73dad0dd334a6548b726"
 dependencies = [
  "anyhow",
  "bincode",
@@ -253,7 +253,7 @@ dependencies = [
 [[package]]
 name = "lawn"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/lawn#7d6eb21f05fbdd1d6ab6d0f74b5c35f054e29cf0"
+source = "git+https://github.com/mentalblood0/lawn#1dab3e6cb9556432b07bb8a4294deeacad2cae20"
 dependencies = [
  "anyhow",
  "bincode",
@@ -382,9 +382,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.44"
+version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
+checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
 dependencies = [
  "proc-macro2",
 ]
@@ -569,7 +569,7 @@ dependencies = [
 [[package]]
 name = "trove"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/trove#0802b6c05789818e0818a7b37fccc7f002292b44"
+source = "git+https://github.com/mentalblood0/trove#136bb7d2baa802a80770f0b753f52a9caf689f90"
 dependencies = [
  "anyhow",
  "base64",
