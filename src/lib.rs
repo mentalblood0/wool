@@ -22,8 +22,8 @@ macro_rules! define_sweater {
                 std::collections::{BTreeSet, BTreeMap},
                 trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
                 $crate::{trove::define_chest,
-                    html_escape,
-                    bincode,
+                    html_escape::encode_text,
+                    bincode::encode_to_vec,
                     fallible_iterator::FallibleIterator,
                     serde::{Deserialize, Serialize},
                     trove::Document,
@@ -643,7 +643,7 @@ macro_rules! define_sweater {
                     let source = match self {
                         Content::Text(text) => text.composed().bytes().collect(),
                         Content::Relation(relation) => {
-                            bincode::encode_to_vec(relation, bincode::config::standard()).with_context(
+                            encode_to_vec(relation, bincode::config::standard()).with_context(
                                 || {
                                     format!(
                                         "Can not binary encode Content {self:?} in order to compute it's \
@@ -1067,7 +1067,7 @@ macro_rules! define_sweater {
                             if let Some(thesis) = self.theses_iterator.next()? {
                                 let thesis_id_string = thesis.id()?.to_string();
                                 let node_header_text = if let Some(ref alias) = thesis.alias {
-                                    html_escape::encode_text(&alias.0).to_string()
+                                    encode_text(&alias.0).to_string()
                                 } else {
                                     thesis_id_string.clone()
                                 };
