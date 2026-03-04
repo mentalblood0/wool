@@ -1,41 +1,1144 @@
-pub mod alias;
-pub mod aliases_resolver;
-pub mod chest;
-pub mod commands;
-pub mod content;
-pub mod graph_generator;
-pub mod read_transaction;
-pub mod relation;
-pub mod sweater;
-pub mod tag;
-pub mod text;
-pub mod thesis;
-pub mod write_transaction;
-
 use trove::PathSegment;
+
+pub extern crate anyhow;
+pub extern crate fallible_iterator;
+pub extern crate regex;
+pub extern crate serde;
+pub extern crate trove;
+
+#[macro_export]
+macro_rules! define_sweater {
+    ($sweater_name:ident(
+        $(
+            $bucket_name:ident
+        )*
+    ) use {
+        $($use_item:tt)*
+    }) => {
+        pub mod $sweater_name {
+            use {
+                std::collections::{BTreeSet, BTreeMap},
+                trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
+                $crate::{trove::define_chest,
+                    fallible_iterator::FallibleIterator,
+                    serde::{Deserialize, Serialize},
+                    trove::Document,
+                    anyhow::{anyhow, Context, Result, Error},
+                    regex::Regex,
+                },
+            };
+
+            define_chest!(chest(
+                theses
+                $(
+                    $bucket_name
+                )*
+            ) {
+            } use {
+                $($use_item)*
+            });
+
+            #[derive(Serialize, Deserialize, Debug, Clone)]
+            pub struct SweaterConfig {
+                pub chest: chest::ChestConfig,
+                pub supported_relations_kinds: BTreeSet<RelationKind>,
+            }
+
+            pub struct Sweater {
+                pub chest: chest::Chest,
+                pub config: SweaterConfig,
+            }
+
+            impl Sweater {
+                pub fn new(config: SweaterConfig) -> Result<Self> {
+                    Ok(Self {
+                        chest: chest::Chest::new(config.chest.clone()).with_context(|| {
+                            format!(
+                                "Can not create sweater with chest config {:?}",
+                                config.chest
+                            )
+                        })?,
+                        config: config,
+                    })
+                }
+
+                pub fn lock_all_and_write<'a, F, R>(&'a mut self, mut f: F) -> Result<R>
+                where
+                    F: FnMut(&mut WriteTransaction<'_, '_, '_, '_>) -> Result<R>,
+                {
+                    self.chest
+                        .lock_all_and_write(|chest_write_transaction| {
+                            f(&mut WriteTransaction {
+                                chest_transaction: chest_write_transaction,
+                                sweater_config: self.config.clone(),
+                            })
+                        })
+                        .with_context(|| "Can not lock chest and initiate write transaction")
+                }
+
+                pub fn lock_all_writes_and_read<F, R>(&self, mut f: F) -> Result<R>
+                where
+                    F: FnMut(ReadTransaction) -> Result<R>,
+                {
+                    self.chest
+                        .lock_all_writes_and_read(|chest_read_transaction| {
+                            f(ReadTransaction {
+                                chest_transaction: &chest_read_transaction,
+                                sweater_config: &self.config,
+                            })
+                        })
+                        .with_context(|| {
+                            "Can not lock all write operations on chest and initiate read transaction"
+                        })
+                }
+            }
+
+
+            pub struct ReadTransaction<'a> {
+                pub chest_transaction: &'a chest::ReadTransaction<'a>,
+                pub sweater_config: &'a SweaterConfig,
+            }
+
+            #[macro_export]
+            macro_rules! define_read_methods {
+                ($lifetime:lifetime) => {
+                    fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>> {
+                        if let Some(thesis_json_value) =
+                            self.chest_transaction.theses_get(thesis_id, &vec![])?
+                        {
+                            Ok(Some(serde_json::from_value(thesis_json_value).unwrap()))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+
+                    fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>> {
+                        Ok(self
+                            .chest_transaction
+                            .theses_select(
+                                &vec![(
+                                    IndexRecordType::Direct,
+                                    path_segments!("alias"),
+                                    serde_json::to_value(alias)?,
+                                )],
+                                &vec![],
+                                None,
+                            )?
+                            .next()?)
+                    }
+
+                    fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>> {
+                        let json_value = serde_json::to_value(thesis_id)?;
+                        self.chest_transaction
+                            .theses_select(
+                                &vec![(
+                                    IndexRecordType::Array,
+                                    path_segments!("content", "Text", "references"),
+                                    json_value.clone(),
+                                )],
+                                &vec![],
+                                None,
+                            )?
+                            .chain(self.chest_transaction.theses_select(
+                                &vec![(
+                                    IndexRecordType::Direct,
+                                    path_segments!("content", "Relation", "from"),
+                                    json_value.clone(),
+                                )],
+                                &vec![],
+                                None,
+                            )?)
+                            .chain(self.chest_transaction.theses_select(
+                                &vec![(
+                                    IndexRecordType::Direct,
+                                    path_segments!("content", "Relation", "to"),
+                                    json_value,
+                                )],
+                                &vec![],
+                                None,
+                            )?)
+                            .collect()
+                    }
+
+                    fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>> {
+                        Ok(
+                            if let Some(json_value) = self
+                                .chest_transaction
+                                .theses_get(thesis_id, &path_segments!("alias"))?
+                            {
+                                serde_json::from_value(json_value)?
+                            } else {
+                                None
+                            },
+                        )
+                    }
+
+                    fn iter_theses(
+                        &self,
+                    ) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>> {
+                        Ok(Box::new(self.chest_transaction.theses_documents()?.map(
+                            |document| Ok(serde_json::from_value(document.value)?),
+                        )))
+                    }
+                };
+            }
+
+            pub trait ReadTransactionMethods<'a> {
+                fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>>;
+                fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>>;
+                fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>>;
+                fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>>;
+                fn iter_theses(&self) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>>;
+            }
+
+            impl<'a> ReadTransactionMethods<'a> for ReadTransaction<'a> {
+                define_read_methods!('a);
+            }
+
+
+            pub struct WriteTransaction<'a, 'b, 'c, 'd> {
+                pub chest_transaction: &'a mut chest::WriteTransaction<'b, 'c, 'd>,
+                pub sweater_config: SweaterConfig,
+            }
+
+            impl<'a, 'b, 'c, 'd> ReadTransactionMethods<'a> for WriteTransaction<'a, 'b, 'c, 'd> {
+                define_read_methods!('a);
+            }
+
+            impl<'a, 'b, 'c, 'd> ReadTransactionMethods<'a> for &mut WriteTransaction<'a, 'b, 'c, 'd> {
+                define_read_methods!('a);
+            }
+
+            impl WriteTransaction<'_, '_, '_, '_> {
+                pub fn insert_thesis(&mut self, thesis: Thesis) -> Result<()> {
+                    let thesis_id = thesis.id()?;
+                    if self
+                        .chest_transaction
+                        .theses_contains_document_with_id(&thesis_id)?
+                    {
+                        Err(anyhow!(
+                            "Can not insert thesis {thesis:?} with id {thesis_id:?} as chest already contains \
+                             document with such id"
+                        ))
+                    } else {
+                        if let Content::Relation(Relation {
+                            from: ref from_id,
+                            to: ref to_id,
+                            kind: ref relation_kind,
+                        }) = thesis.content
+                        {
+                            if !self
+                                .sweater_config
+                                .supported_relations_kinds
+                                .contains(&relation_kind)
+                            {
+                                return Err(anyhow!(
+                                    "Can not insert relation {thesis:?} of kind {relation_kind:?} in sweater \
+                                     with supported relations kinds {:?} as it's kind is not supported",
+                                    self.sweater_config.supported_relations_kinds
+                                ));
+                            }
+                            for related_id in [from_id, to_id] {
+                                if self
+                                    .chest_transaction
+                                    .theses_get(&related_id, &path_segments!("content"))?
+                                    .is_none()
+                                {
+                                    return Err(anyhow!(
+                                        "Can not insert relation {thesis:?} in sweater without inserted \
+                                         thesis with {related_id:?}"
+                                    ));
+                                }
+                            }
+                        }
+                        self.chest_transaction.theses_insert_with_id(Document {
+                            id: thesis_id,
+                            value: serde_json::to_value(thesis.clone())?,
+                        })?;
+                        Ok(())
+                    }
+                }
+
+                pub fn tag_thesis(&mut self, thesis_id: &DocumentId, tag: Tag) -> Result<()> {
+                    if !self.chest_transaction.theses_contains_element(
+                        thesis_id,
+                        &path_segments!("tags"),
+                        &serde_json::to_value(tag.clone())?.try_into()?,
+                    )? {
+                        self.chest_transaction.theses_push(
+                            thesis_id,
+                            &path_segments!("tags"),
+                            serde_json::to_value(tag)?,
+                        )?;
+                    }
+                    Ok(())
+                }
+
+                pub fn untag_thesis(&mut self, thesis_id: &DocumentId, tag: &Tag) -> Result<()> {
+                    if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
+                        thesis_id,
+                        &path_segments!("tags"),
+                        &serde_json::to_value(tag)?.try_into()?,
+                    )? {
+                        self.chest_transaction
+                            .theses_remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
+                    }
+                    Ok(())
+                }
+
+                pub fn remove_thesis(&mut self, thesis_id: &DocumentId) -> Result<()> {
+                    if self
+                        .chest_transaction
+                        .theses_contains_document_with_id(thesis_id)?
+                    {
+                        self.chest_transaction.theses_remove(thesis_id, &vec![])?;
+                        let thesis_id_json_value = serde_json::to_value(thesis_id)?;
+                        let relations_ids = self
+                            .chest_transaction
+                            .theses_select(
+                                &vec![(
+                                    IndexRecordType::Direct,
+                                    path_segments!("content", "Relation", "from"),
+                                    thesis_id_json_value.clone(),
+                                )],
+                                &vec![],
+                                None,
+                            )?
+                            .chain(self.chest_transaction.theses_select(
+                                &vec![(
+                                    IndexRecordType::Direct,
+                                    path_segments!("content", "Relation", "to"),
+                                    thesis_id_json_value,
+                                )],
+                                &vec![],
+                                None,
+                            )?)
+                            .collect::<Vec<_>>()?;
+                        for relation_id in relations_ids {
+                            self.chest_transaction
+                                .theses_remove(&relation_id, &vec![])?;
+                        }
+                        let where_mentioned = self.where_referenced(thesis_id)?;
+                        for id_of_thesis_where_mentioned in where_mentioned {
+                            self.remove_thesis(&id_of_thesis_where_mentioned)?;
+                        }
+                    }
+                    Ok(())
+                }
+
+                pub fn set_alias(&mut self, thesis_id: DocumentId, new_alias: Alias) -> Result<()> {
+                    self.chest_transaction.theses_update(
+                        thesis_id,
+                        path_segments!("alias"),
+                        serde_json::to_value(new_alias)?,
+                    )?;
+                    Ok(())
+                }
+
+                pub fn execute_command(&mut self, command: &Command) -> Result<&Self> {
+                    match command {
+                        Command::AddThesis(thesis) => self.insert_thesis(thesis.clone())?,
+                        Command::RemoveThesis(thesis_id) => self.remove_thesis(thesis_id)?,
+                        Command::AddTags(thesis_id, tags) => {
+                            for tag in tags {
+                                self.tag_thesis(thesis_id, tag.clone())?;
+                            }
+                        }
+                        Command::RemoveTags(thesis_id, tags) => {
+                            for tag in tags {
+                                self.untag_thesis(thesis_id, tag)?;
+                            }
+                        }
+                        Command::SetAlias(thesis_id, new_alias) => {
+                            self.set_alias(thesis_id.clone(), new_alias.clone())?;
+                        }
+                    };
+                    Ok(self)
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+            pub struct Alias(pub String);
+
+            impl Alias {
+                pub fn validated(&self) -> Result<&Self> {
+                    static ALIAS_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let sentence_regex = ALIAS_REGEX.get_or_init(|| {
+                        Regex::new(r#"^[^\[\]]+$"#)
+                            .with_context(|| "Can not compile regular expression for thesis alias validation")
+                            .unwrap()
+                    });
+                    if sentence_regex.is_match(&self.0) {
+                        Ok(self)
+                    } else {
+                        Err(anyhow!(
+                            "Alias must be sequence of one or more non-whitespace characters, so {:?} does \
+                             not seem to be text",
+                            self.0
+                        ))
+                    }
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub struct RawText(pub String);
+
+            impl RawText {
+                pub fn validated(&self) -> Result<&Self> {
+                    static RAW_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let sentence_regex = RAW_REGEX.get_or_init(|| {
+                        Regex::new(r#"^[0-9\p{Script=Cyrillic}\p{Script=Latin}\s,\-\:\."']+$"#)
+                            .with_context(|| "Can not compile regular expression for text validation")
+                            .unwrap()
+                    });
+                    if sentence_regex.is_match(&self.0) {
+                        Ok(self)
+                    } else {
+                        Err(anyhow!(
+                            "Text part around references must be Cyrillic/Latin text: letters, whitespaces, \
+                             punctuation ,-:.'\", so {:?} does not seem to be text",
+                            self.0
+                        ))
+                    }
+                }
+            }
+
+            pub struct AliasesResolver<'a> {
+                pub read_able_transaction: &'a dyn ReadTransactionMethods<'a>,
+                pub known_aliases: BTreeMap<Alias, DocumentId>,
+            }
+
+            impl<'a> AliasesResolver<'a> {
+                pub fn get_thesis_id_by_reference(&self, reference: &Reference) -> Result<DocumentId> {
+                    Ok(match reference {
+                        Reference::DocumentId(thesis_id) => {
+                            if self.read_able_transaction.get_thesis(thesis_id)?.is_none() {
+                                return Err(anyhow!("Can not find thesis with id {thesis_id:?}"));
+                            }
+                            thesis_id.clone()
+                        }
+                        Reference::Alias(alias) => {
+                            if let Some(result) = self.known_aliases.get(alias) {
+                                result.clone()
+                            } else {
+                                self.read_able_transaction
+                                    .get_thesis_id_by_alias(alias)?
+                                    .ok_or_else(|| anyhow!("Can not find thesis id by alias {alias:?}"))?
+                            }
+                        }
+                    })
+                }
+
+                pub fn remember(&mut self, alias: Alias, document_id: DocumentId) -> &Self {
+                    self.known_aliases.insert(alias, document_id);
+                    self
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub struct Thesis {
+                pub alias: Option<Alias>,
+                pub content: Content,
+
+                #[serde(default)]
+                pub tags: Vec<Tag>,
+            }
+
+            impl Thesis {
+                pub fn id(&self) -> Result<DocumentId> {
+                    self.content.id()
+                }
+
+                pub fn validated(&self) -> Result<&Self> {
+                    if let Some(ref alias) = self.alias {
+                        alias.validated()?;
+                    }
+                    self.content.validated()?;
+                    for tag in self.tags.iter() {
+                        tag.validated()?;
+                    }
+                    Ok(self)
+                }
+
+                pub fn references(&self) -> Vec<DocumentId> {
+                    match self.content {
+                        Content::Text(Text {
+                            raw_text_parts: _,
+                            ref references,
+                            start_with_reference: _,
+                        }) => references.clone(),
+                        Content::Relation(Relation {
+                            ref from,
+                            ref to,
+                            kind: _,
+                        }) => vec![from.clone(), to.clone()],
+                    }
+                }
+            }
+
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub struct Text {
+                #[serde(default)]
+                pub raw_text_parts: Vec<RawText>,
+                #[serde(default)]
+                pub references: Vec<DocumentId>,
+                pub start_with_reference: bool,
+            }
+
+            impl<'a> Text {
+                pub fn new(input: &str, aliases_resolver: &mut AliasesResolver) -> Result<Self> {
+                    static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
+                        Regex::new(r#"\[(:?([A-Za-z0-9-_]{22})|([^\[\]]+))\]"#)
+                            .with_context(|| {
+                                "Can not compile regular expression to split text on raw text parts and \
+                                 references"
+                            })
+                            .unwrap()
+                    });
+
+                    let mut result = Self {
+                        raw_text_parts: Vec::new(),
+                        references: Vec::new(),
+                        start_with_reference: false,
+                    };
+                    let mut last_match_end = 0;
+                    for reference_match in reference_in_text_regex.captures_iter(input) {
+                        let full_reference_match = reference_match.get(0).unwrap();
+                        if full_reference_match.start() == 0 {
+                            result.start_with_reference = true;
+                        }
+                        let text_before = &input[last_match_end..full_reference_match.start()];
+                        if !text_before.is_empty() {
+                            result.raw_text_parts.push(RawText(text_before.to_string()));
+                        }
+                        if let Some(thesis_id_string) = reference_match
+                            .get(2)
+                            .map(|thesis_id_string_match| thesis_id_string_match.as_str())
+                        {
+                            result.references.push(
+                                serde_json::from_value(serde_json::Value::String(thesis_id_string.to_string()))
+                                    .unwrap(),
+                            );
+                        } else if let Some(alias_string) = reference_match
+                            .get(3)
+                            .map(|alias_string_match| alias_string_match.as_str())
+                        {
+                            result.references.push(
+                                aliases_resolver
+                                    .get_thesis_id_by_reference(&Reference::Alias(Alias(
+                                        alias_string.to_string(),
+                                    )))
+                                    .with_context(|| {
+                                        anyhow!(
+                                            "Can not parse text {:?} with alias {:?} because do not know such \
+                                             alias",
+                                            input,
+                                            alias_string
+                                        )
+                                    })?,
+                            );
+                        }
+                        last_match_end = full_reference_match.end();
+                    }
+                    if last_match_end < input.len() {
+                        let remaining = &input[last_match_end..];
+                        if !remaining.is_empty() {
+                            result.raw_text_parts.push(RawText(remaining.to_string()));
+                        }
+                    }
+
+                    Ok(result)
+                }
+
+                pub fn composed(&self) -> String {
+                    let mut result_list = Vec::new();
+                    if self.start_with_reference {
+                        for (reference_index, reference) in self.references.iter().enumerate() {
+                            result_list.push(format!(
+                                "[{}]",
+                                serde_json::to_value(reference).unwrap().as_str().unwrap()
+                            ));
+                            if reference_index < self.raw_text_parts.len() {
+                                result_list.push(self.raw_text_parts[reference_index].0.clone());
+                            }
+                        }
+                    } else {
+                        for (part_index, part) in self.raw_text_parts.iter().enumerate() {
+                            result_list.push(part.0.clone());
+                            if part_index < self.references.len() {
+                                result_list.push(format!(
+                                    "[{}]",
+                                    serde_json::to_value(&self.references[part_index])
+                                        .unwrap()
+                                        .as_str()
+                                        .unwrap()
+                                ));
+                            }
+                        }
+                    }
+                    result_list.concat()
+                }
+
+                pub fn composed_with_aliases(
+                    &self,
+                    read_able_transaction: &dyn ReadTransactionMethods<'a>,
+                ) -> Result<String> {
+                    let mut result_list = Vec::new();
+                    if self.start_with_reference {
+                        for (reference_index, reference) in self.references.iter().enumerate() {
+                            result_list.push(format!(
+                                "[{}]",
+                                if let Some(alias) = read_able_transaction.get_alias_by_thesis_id(reference)? {
+                                    alias.0
+                                } else {
+                                    reference.to_string()
+                                }
+                            ));
+                            if reference_index < self.raw_text_parts.len() {
+                                result_list.push(self.raw_text_parts[reference_index].0.clone());
+                            }
+                        }
+                    } else {
+                        for (part_index, part) in self.raw_text_parts.iter().enumerate() {
+                            result_list.push(part.0.clone());
+                            if part_index < self.references.len() {
+                                result_list.push(format!(
+                                    "[{}]",
+                                    if let Some(alias) = read_able_transaction
+                                        .get_alias_by_thesis_id(&self.references[part_index])?
+                                    {
+                                        alias.0
+                                    } else {
+                                        self.references[part_index].to_string()
+                                    }
+                                ));
+                            }
+                        }
+                    }
+                    Ok(result_list.concat())
+                }
+
+                pub fn validated(&self) -> Result<&Self> {
+                    for part in self.raw_text_parts.iter() {
+                        part.validated()?;
+                    }
+                    Ok(self)
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub enum Content {
+                Text(Text),
+                Relation(Relation),
+            }
+
+            impl Content {
+                pub fn id(&self) -> Result<DocumentId> {
+                    let source = match self {
+                        Content::Text(text) => text.composed().bytes().collect(),
+                        Content::Relation(relation) => {
+                            bincode::encode_to_vec(relation, bincode::config::standard()).with_context(
+                                || {
+                                    format!(
+                                        "Can not binary encode Content {self:?} in order to compute it's \
+                                         DocumentId as it's binary representation hash"
+                                    )
+                                },
+                            )?
+                        }
+                    };
+                    Ok(DocumentId {
+                        value: xxhash_rust::xxh3::xxh3_128(&source).to_be_bytes(),
+                    })
+                }
+
+                pub fn validated(&self) -> Result<&Self> {
+                    match self {
+                        Content::Text(text) => {
+                            text.validated()?;
+                        }
+                        Content::Relation(relation) => {
+                            relation.validated()?;
+                        }
+                    }
+                    Ok(self)
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub struct Tag(pub String);
+
+            impl Tag {
+                pub fn validated(&self) -> Result<&Self> {
+                    static TAG_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let tag_regex = TAG_REGEX.get_or_init(|| {
+                        Regex::new(r"^\w+$")
+                            .with_context(|| "Can not compile regular expression for tag validation")
+                            .unwrap()
+                    });
+                    if tag_regex.is_match(&self.0) {
+                        Ok(self)
+                    } else {
+                        Err(anyhow!(
+                            "Tag must be a word characters sequence, so {:?} does not seem to be tag",
+                            self.0
+                        ))
+                    }
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq, PartialOrd, Ord)]
+            pub struct RelationKind(pub String);
+
+            impl RelationKind {
+                pub fn validated(&self) -> Result<&Self> {
+                    static RELATION_KIND_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let sentence_regex = RELATION_KIND_REGEX.get_or_init(|| {
+                        Regex::new(r"^[\w ]+$")
+                            .with_context(|| "Can not compile regular expression for relation kind validation")
+                            .unwrap()
+                    });
+                    if sentence_regex.is_match(&self.0) {
+                        Ok(self)
+                    } else {
+                        Err(anyhow!(
+                            "Relation kind must be an English words sequence without punctuation, so {:?} \
+                             does not seem to be relation kind",
+                            self.0
+                        ))
+                    }
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
+            pub struct Relation {
+                pub from: DocumentId,
+                pub to: DocumentId,
+                pub kind: RelationKind,
+            }
+
+            impl Relation {
+                pub fn validated(&self) -> Result<&Self> {
+                    self.kind.validated()?;
+                    Ok(self)
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+            pub enum Reference {
+                Alias(Alias),
+                DocumentId(DocumentId),
+            }
+
+            impl Reference {
+                pub fn new(input: &str) -> Result<Self> {
+                    if let Ok(alias) = Alias(input.to_string()).validated() {
+                        Ok(Self::Alias(alias.to_owned()))
+                    } else {
+                        Ok(Self::DocumentId(serde_json::from_value(
+                            serde_json::Value::String(input.to_string()),
+                        )?))
+                    }
+                }
+            }
+
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            pub enum Command {
+                AddThesis(Thesis),
+                RemoveThesis(DocumentId),
+                AddTags(DocumentId, Vec<Tag>),
+                RemoveTags(DocumentId, Vec<Tag>),
+                SetAlias(DocumentId, Alias),
+            }
+
+            impl Command {
+                pub fn validated(&self) -> Result<&Self> {
+                    match self {
+                        Command::AddThesis(thesis) => {
+                            thesis.validated()?;
+                        }
+                        Command::RemoveThesis(_) => {}
+                        Command::AddTags(_, tags) => {
+                            for tag in tags.iter() {
+                                tag.validated()?;
+                            }
+                        }
+                        Command::RemoveTags(_, tags) => {
+                            for tag in tags.iter() {
+                                tag.validated()?;
+                            }
+                        }
+                        Command::SetAlias(_, alias) => {
+                            alias.validated()?;
+                        }
+                    }
+                    Ok(self)
+                }
+            }
+
+            pub struct CommandsIterator<'a> {
+                supported_relations_kinds: &'a BTreeSet<RelationKind>,
+                paragraphs_iterator: Box<dyn FallibleIterator<Item = (usize, &'a str), Error = Error> + 'a>,
+                aliases_resolver: &'a mut AliasesResolver<'a>,
+            }
+
+            impl<'a> CommandsIterator<'a> {
+                pub fn new(
+                    input: &'a str,
+                    supported_relations_kinds: &'a BTreeSet<RelationKind>,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                ) -> Self {
+                    static COMMANDS_SPLIT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let commands_split_regex = COMMANDS_SPLIT_REGEX.get_or_init(|| {
+                        Regex::new(r#"(\r?\n|\r){2,}"#)
+                            .with_context(|| "Can not compile regular expression for commands splitting")
+                            .unwrap()
+                    });
+                    Self {
+                        supported_relations_kinds,
+                        aliases_resolver: aliases_resolver,
+                        paragraphs_iterator: Box::new(fallible_iterator::convert(
+                            commands_split_regex
+                                .split(input)
+                                .map(|paragraph| paragraph.trim())
+                                .filter(|paragraph| !paragraph.is_empty())
+                                .enumerate()
+                                .map(|index_and_paragraph| Ok(index_and_paragraph)),
+                        )),
+                    }
+                }
+            }
+
+            impl<'a> FallibleIterator for CommandsIterator<'a> {
+                type Item = Command;
+                type Error = Error;
+
+                fn next(&mut self) -> Result<Option<Self::Item>> {
+                    if let Some((paragraph_index, paragraph)) = self.paragraphs_iterator.next()? {
+                        let lines = paragraph.split('\n').collect::<Vec<_>>();
+                        static COMMAND_FIRST_LINE_REGEX: std::sync::OnceLock<Regex> =
+                            std::sync::OnceLock::new();
+                        let command_first_line_regex = COMMAND_FIRST_LINE_REGEX.get_or_init(|| {
+                            Regex::new(r#"^ *(\+|-|#|\^|@)(:? +([^ ]+))? *$"#)
+                                .with_context(|| "Can not compile regular expression for commands splitting")
+                                .unwrap()
+                        });
+                        if let Some(captures) = command_first_line_regex.captures(lines[0]) {
+                            let operation_char = captures[1].chars().next().unwrap();
+                            let alias_option = captures
+                                .get(3)
+                                .map(|alias_match| Alias(alias_match.as_str().to_string()));
+                            if let Some(ref alias) = alias_option {
+                                alias.validated().with_context(|| {
+                                    format!(
+                                        "Can not parse first line {:?} in {}-nth paragraph {:?}",
+                                        lines[0],
+                                        paragraph_index + 1,
+                                        paragraph
+                                    )
+                                })?;
+                            }
+                            Ok(Some(
+                                match (operation_char, lines.len()) {
+                                    ('+', 2) => {
+                                        let thesis = Thesis {
+                                            alias: alias_option.clone(),
+                                            content: Content::Text(Text::new(lines[1], self.aliases_resolver)?),
+                                            tags: vec![],
+                                        };
+                                        if let Some(ref alias) = alias_option {
+                                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
+                                        }
+                                        Command::AddThesis(thesis)
+                                    }
+                                    ('+', 4) => {
+                                        let thesis = Thesis {
+                                            alias: alias_option.clone(),
+                                            content: Content::Relation(Relation {
+                                                from: self
+                                                    .aliases_resolver
+                                                    .get_thesis_id_by_reference(&Reference::new(lines[1])?)
+                                                    .with_context(|| {
+                                                        format!(
+                                                            "Can not parse relation for AddThesis command on \
+                                                             {}-th paragraph {:?}",
+                                                            paragraph_index + 1,
+                                                            paragraph
+                                                        )
+                                                    })?,
+                                                kind: RelationKind(lines[2].to_string()),
+                                                to: self
+                                                    .aliases_resolver
+                                                    .get_thesis_id_by_reference(&Reference::new(lines[3])?)?,
+                                            }),
+                                            tags: vec![],
+                                        };
+                                        if let Some(ref alias) = alias_option {
+                                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
+                                        }
+                                        Command::AddThesis(thesis)
+                                    }
+                                    ('-', 2) => Command::RemoveThesis(
+                                        self.aliases_resolver
+                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                                    ),
+                                    ('#', 3..) => Command::AddTags(
+                                        self.aliases_resolver
+                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                                        lines[2..]
+                                            .iter()
+                                            .map(|tag_string| Tag(tag_string.to_string()))
+                                            .collect(),
+                                    ),
+                                    ('^', 3..) => Command::RemoveTags(
+                                        self.aliases_resolver
+                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
+                                        lines[2..]
+                                            .iter()
+                                            .map(|tag_string| Tag(tag_string.to_string()))
+                                            .collect(),
+                                    ),
+                                    ('@', 2) => {
+                                        let thesis_id = self
+                                            .aliases_resolver
+                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?;
+                                        let alias = alias_option.ok_or_else(|| {
+                                            anyhow!(
+                                                "Can not parse {}-th paragraph {paragraph:?}: looks like it \
+                                                 is command for setting alias, yet there is no new alias \
+                                                 provided in first line after '@' character",
+                                                paragraph_index + 1
+                                            )
+                                        })?;
+                                        self.aliases_resolver
+                                            .remember(alias.clone(), thesis_id.clone());
+                                        Command::SetAlias(thesis_id, alias)
+                                    }
+                                    _ => {
+                                        return Err(anyhow!(
+                                            "Unsupported operation character and lines count combination \
+                                             ({:?}, {}) in first line {:?} of {}-th paragraph {:?}, supported \
+                                             combinations are ('+', 2) for adding text thesis, ('+', 4) for \
+                                             adding relation thesis, ('-', 2) for removing thesis, ('#', 3) \
+                                             for adding tag, ('^', 3) for removing tag",
+                                            operation_char,
+                                            lines.len(),
+                                            lines[0],
+                                            paragraph_index + 1,
+                                            paragraph
+                                        ));
+                                    }
+                                }
+                                .validated()
+                                .with_context(|| {
+                                    format!(
+                                        "Invalid command parsed from {}-th paragraph {:?}",
+                                        paragraph_index + 1,
+                                        paragraph
+                                    )
+                                })?
+                                .to_owned(),
+                            ))
+                        } else {
+                            Err(anyhow!(
+                                "Can not parse first line {:?} in {}-th paragraph {:?}",
+                                lines[0],
+                                paragraph_index + 1,
+                                paragraph
+                            ))
+                        }
+                    } else {
+                        Ok(None)
+                    }
+                }
+            }
+
+            #[derive(PartialEq, Eq, Serialize, Deserialize)]
+            pub enum ExternalizeRelationsNodes {
+                None,
+                Related,
+                All,
+            }
+
+            #[derive(PartialEq, Eq, Serialize, Deserialize)]
+            pub enum ShowNodesReferences {
+                None,
+                Mentioned,
+                All,
+            }
+
+            #[derive(Serialize, Deserialize)]
+            pub struct GraphGeneratorConfig {
+                pub wrap_width: u16,
+                pub externalize_relations_nodes: ExternalizeRelationsNodes,
+                pub show_nodes_references: ShowNodesReferences,
+            }
+
+            pub enum Stage {
+                BeforeFirstLine,
+                Middle,
+                AfterLastLine,
+            }
+
+            pub struct GraphGenerator<'a> {
+                pub config: &'a GraphGeneratorConfig,
+                pub read_able_transaction: &'a dyn ReadTransactionMethods<'a>,
+                pub theses_iterator: Box<dyn FallibleIterator<Item = Thesis, Error = Error> + 'a>,
+                pub stage: Stage,
+            }
+
+            impl<'a> GraphGenerator<'a> {
+                pub fn new(
+                    config: &'a GraphGeneratorConfig,
+                    read_able_transaction: &'a dyn ReadTransactionMethods<'a>,
+                ) -> Result<Self> {
+                    Ok(Self {
+                        config,
+                        read_able_transaction,
+                        theses_iterator: Box::new(read_able_transaction.iter_theses()?),
+                        stage: Stage::BeforeFirstLine,
+                    })
+                }
+            }
+
+            impl<'a> GraphGenerator<'a> {
+                fn wrap(&self, text: &str) -> String {
+                    let wrap_width = self.config.wrap_width as usize;
+                    if wrap_width == 0 {
+                        return String::new();
+                    }
+
+                    let mut result = String::with_capacity(text.len() + (text.len() / wrap_width) * 5);
+                    let mut current_line = String::new();
+                    let mut current_line_size = 0;
+                    let mut first_line = true;
+
+                    for word in text.split_whitespace() {
+                        let word_size = word.len();
+
+                        if current_line.is_empty() {
+                            current_line.reserve(word_size);
+                            current_line.push_str(word);
+                            current_line_size = word_size;
+                        } else if current_line_size + 1 + word_size <= wrap_width {
+                            current_line.push(' ');
+                            current_line.push_str(word);
+                            current_line_size += 1 + word_size;
+                        } else {
+                            if !first_line {
+                                result.push_str("<br/>");
+                            }
+                            result.push_str(&current_line);
+                            first_line = false;
+                            current_line = String::with_capacity(word_size);
+                            current_line.push_str(word);
+                            current_line_size = word_size;
+                        }
+                    }
+
+                    if !current_line.is_empty() {
+                        if !first_line {
+                            result.push_str("<br/>");
+                        }
+                        result.push_str(&current_line);
+                    }
+
+                    result
+                }
+            }
+
+            impl<'a> FallibleIterator for GraphGenerator<'a> {
+                type Item = String;
+                type Error = Error;
+
+                fn next(&mut self) -> Result<Option<Self::Item>> {
+                    Ok(match self.stage {
+                        Stage::BeforeFirstLine => {
+                            self.stage = Stage::Middle;
+                            Some("digraph sweater {".to_string())
+                        }
+                        Stage::Middle => {
+                            if let Some(thesis) = self.theses_iterator.next()? {
+                                let thesis_id_string = thesis.id()?.to_string();
+                                let node_header_text = if let Some(ref alias) = thesis.alias {
+                                    html_escape::encode_text(&alias.0).to_string()
+                                } else {
+                                    thesis_id_string.clone()
+                                };
+                                match thesis.content {
+                                    Content::Text(ref text) => {
+                                        let node_body_text =
+                                            self.wrap(&text.composed_with_aliases(self.read_able_transaction)?);
+                                        let node_header = format!(
+                                            r#"<TR><TD BORDER="1" SIDES="b">{node_header_text}</TD></TR>"#,
+                                        );
+                                        let node_label = format!(
+                                            r#"<TABLE BORDER="2" CELLSPACING="0" CELLPADDING="8">{}<TR><TD BORDER="0">{}</TD></TR></TABLE>"#,
+                                            node_header, node_body_text
+                                        );
+                                        Some(
+                                            format!(
+                                                "\n\t\"{}\" [label=<{}>, shape=plaintext];", // node definition
+                                                thesis_id_string, node_label
+                                            ) + &thesis // node references arrows definitions
+                                                .references()
+                                                .iter()
+                                                .map(|referenced_thesis_id| {
+                                                    format!(
+                                                        "\n\t\"{thesis_id_string}\" -> \"{}\" \
+                                                         [arrowhead=none, color=\"grey\" style=dotted];",
+                                                        referenced_thesis_id.to_string()
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join(""),
+                                        )
+                                    }
+                                    Content::Relation(ref relation) => {
+                                        let node_label = format!(
+                                            r#"<TABLE CELLSPACING="0" CELLPADDING="8" STYLE="dashed"><TR><TD SIDES="b" STYLE="dashed">{node_header_text}</TD></TR><TR><TD BORDER="0">{}</TD></TR></TABLE>"#,
+                                            relation.kind.0
+                                        );
+                                        Some(format!(
+                                            "\n\t\"{thesis_id_string}\" [label=<{node_label}>, \
+                                             shape=plaintext];\n\t\"{}\" -> \"{}\" [dir=back, \
+                                             arrowtail=tee];\n\t\"{}\" -> \"{}\";",
+                                            relation.from.to_string(), // arrow to relation node
+                                            thesis_id_string,
+                                            thesis_id_string, // arrow from relation node
+                                            relation.to.to_string()
+                                        ))
+                                    }
+                                }
+                            } else {
+                                self.stage = Stage::AfterLastLine;
+                                Some("\n}".to_string())
+                            }
+                        }
+                        Stage::AfterLastLine => None,
+                    })
+                }
+            }
+        }
+    };
+}
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    define_sweater!(test_sweater(
+    ) use {
+    });
 
-    use fallible_iterator::FallibleIterator;
-    use nanorand::{Rng, WyRand};
-    use pretty_assertions::assert_eq;
-    use trove::DocumentId;
-
-    use crate::aliases_resolver::AliasesResolver;
-    use crate::commands::CommandsIterator;
-    use crate::content::Content;
-    use crate::graph_generator::{
-        ExternalizeRelationsNodes, GraphGenerator, GraphGeneratorConfig, ShowNodesReferences,
+    use {
+        fallible_iterator::FallibleIterator,
+        nanorand::{Rng, WyRand},
+        pretty_assertions::assert_eq,
+        std::collections::BTreeMap,
+        test_sweater::*,
+        trove::DocumentId,
     };
-    use crate::read_transaction::ReadTransactionMethods;
-    use crate::relation::Relation;
-    use crate::sweater::Sweater;
-    use crate::tag::Tag;
-    use crate::text::Text;
-    use crate::thesis::Thesis;
-    use crate::write_transaction::WriteTransaction;
 
     fn new_default_sweater(test_name_for_isolation: &str) -> Sweater {
         Sweater::new(
