@@ -23,7 +23,7 @@ macro_rules! define_sweater {
                 trove::{path_segments, PathSegment, DocumentId, IndexRecordType},
                 $crate::{trove::define_chest,
                     html_escape::encode_text,
-                    bincode::{Encode, encode_to_vec},
+                    bincode::{Encode, encode_to_vec, config},
                     fallible_iterator::FallibleIterator,
                     serde::{Deserialize, Serialize},
                     trove::Document,
@@ -643,7 +643,7 @@ macro_rules! define_sweater {
                     let source = match self {
                         Content::Text(text) => text.composed().bytes().collect(),
                         Content::Relation(relation) => {
-                            encode_to_vec(relation, bincode::config::standard()).with_context(
+                            encode_to_vec(relation, config::standard()).with_context(
                                 || {
                                     format!(
                                         "Can not binary encode Content {self:?} in order to compute it's \
@@ -693,7 +693,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq, PartialOrd, Ord)]
+            #[derive(Serialize, Deserialize, Debug, Clone, Encode, PartialEq, Eq, PartialOrd, Ord)]
             pub struct RelationKind(pub String);
 
             impl RelationKind {
