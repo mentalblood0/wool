@@ -6,6 +6,7 @@ pub extern crate serde;
 pub extern crate trove;
 
 pub use trove::bincode;
+pub use trove::xxhash_rust;
 
 #[macro_export]
 macro_rules! define_sweater {
@@ -652,7 +653,7 @@ macro_rules! define_sweater {
                         }
                     };
                     Ok(DocumentId {
-                        value: xxhash_rust::xxh3::xxh3_128(&source).to_be_bytes(),
+                        value: $crate::xxhash_rust::xxh3::xxh3_128(&source).to_be_bytes(),
                     })
                 }
 
