@@ -115,6 +115,21 @@ macro_rules! define_sweater {
                         }
                     }
 
+                    fn iter_theses_ids_by_tags(
+                        &self,
+                        present_tags: &Vec<Tag>,
+                        absent_tags: &Vec<Tag>,
+                        start_after_thesis_id: Option<DocumentId>
+                    ) -> Result<Box<dyn FallibleIterator<Item = DocumentId, Error = Error> + '_>> {
+                        self
+                            .chest_transaction
+                            .theses_select(
+                                &present_tags.iter().map(|tag| (IndexRecordType::Array, path_segments!("tags"), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
+                                &absent_tags.iter().map(|tag| (IndexRecordType::Array, path_segments!("tags"), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
+                                start_after_thesis_id,
+                            )
+                    }
+
                     fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>> {
                         Ok(self
                             .chest_transaction
@@ -188,6 +203,12 @@ macro_rules! define_sweater {
 
             pub trait ReadTransactionMethods<'a> {
                 fn get_thesis(&self, thesis_id: &DocumentId) -> Result<Option<Thesis>>;
+                fn iter_theses_ids_by_tags(
+                    &self,
+                    present_tags: &Vec<Tag>,
+                    absent_tags: &Vec<Tag>,
+                    start_after_thesis_id: Option<DocumentId>
+                ) -> Result<Box<dyn FallibleIterator<Item = DocumentId, Error = Error> + '_>>;
                 fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>>;
                 fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>>;
                 fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>>;
