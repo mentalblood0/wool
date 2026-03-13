@@ -21,7 +21,7 @@ macro_rules! define_sweater {
             use {
                 std::collections::{BTreeSet, BTreeMap},
                 $crate::{
-                    trove::{define_chest, path_segments, DocumentId, IndexRecordType},
+                    trove::{define_chest, path_segments, search_path_segments, DocumentId},
                     html_escape::encode_text,
                     bincode::{self, Encode, encode_to_vec, config},
                     fallible_iterator::FallibleIterator,
@@ -38,6 +38,7 @@ macro_rules! define_sweater {
                     $bucket_name
                 )*
             ) {
+            } {
             } use {
                 $($use_item)*
             });
@@ -124,8 +125,8 @@ macro_rules! define_sweater {
                         self
                             .chest_transaction
                             .theses_select(
-                                &present_tags.iter().map(|tag| (IndexRecordType::Array, path_segments!("tags"), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
-                                &absent_tags.iter().map(|tag| (IndexRecordType::Array, path_segments!("tags"), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
+                                &present_tags.iter().map(|tag| (search_path_segments!("tags", ()), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
+                                &absent_tags.iter().map(|tag| (search_path_segments!("tags", ()), serde_json::to_value(tag).unwrap())).collect::<Vec<_>>(),
                                 start_after_thesis_id,
                             )
                     }
@@ -135,8 +136,7 @@ macro_rules! define_sweater {
                             .chest_transaction
                             .theses_select(
                                 &vec![(
-                                    IndexRecordType::Direct,
-                                    path_segments!("alias"),
+                                    search_path_segments!("alias"),
                                     serde_json::to_value(alias)?,
                                 )],
                                 &vec![],
@@ -150,8 +150,7 @@ macro_rules! define_sweater {
                         self.chest_transaction
                             .theses_select(
                                 &vec![(
-                                    IndexRecordType::Array,
-                                    path_segments!("content", "Text", "references"),
+                                    search_path_segments!("content", "Text", "references", ()),
                                     json_value.clone(),
                                 )],
                                 &vec![],
@@ -159,8 +158,7 @@ macro_rules! define_sweater {
                             )?
                             .chain(self.chest_transaction.theses_select(
                                 &vec![(
-                                    IndexRecordType::Direct,
-                                    path_segments!("content", "Relation", "from"),
+                                    search_path_segments!("content", "Relation", "from"),
                                     json_value.clone(),
                                 )],
                                 &vec![],
@@ -168,8 +166,7 @@ macro_rules! define_sweater {
                             )?)
                             .chain(self.chest_transaction.theses_select(
                                 &vec![(
-                                    IndexRecordType::Direct,
-                                    path_segments!("content", "Relation", "to"),
+                                    search_path_segments!("content", "Relation", "to"),
                                     json_value,
                                 )],
                                 &vec![],
@@ -286,7 +283,7 @@ macro_rules! define_sweater {
                 pub fn tag_thesis(&mut self, thesis_id: &DocumentId, tag: Tag) -> Result<()> {
                     if !self.chest_transaction.theses_contains_element(
                         thesis_id,
-                        &path_segments!("tags"),
+                        &search_path_segments!("tags", ()),
                         &serde_json::to_value(tag.clone())?.try_into()?,
                     )? {
                         self.chest_transaction.theses_push(
@@ -301,7 +298,7 @@ macro_rules! define_sweater {
                 pub fn untag_thesis(&mut self, thesis_id: &DocumentId, tag: &Tag) -> Result<()> {
                     if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
                         thesis_id,
-                        &path_segments!("tags"),
+                        &search_path_segments!("tags", ()),
                         &serde_json::to_value(tag)?.try_into()?,
                     )? {
                         self.chest_transaction
@@ -321,8 +318,7 @@ macro_rules! define_sweater {
                             .chest_transaction
                             .theses_select(
                                 &vec![(
-                                    IndexRecordType::Direct,
-                                    path_segments!("content", "Relation", "from"),
+                                    search_path_segments!("content", "Relation", "from", ()),
                                     thesis_id_json_value.clone(),
                                 )],
                                 &vec![],
@@ -330,8 +326,7 @@ macro_rules! define_sweater {
                             )?
                             .chain(self.chest_transaction.theses_select(
                                 &vec![(
-                                    IndexRecordType::Direct,
-                                    path_segments!("content", "Relation", "to"),
+                                    search_path_segments!("content", "Relation", "to", ()),
                                     thesis_id_json_value,
                                 )],
                                 &vec![],
