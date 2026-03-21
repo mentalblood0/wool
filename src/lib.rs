@@ -346,7 +346,7 @@ macro_rules! define_sweater {
                 }
 
                 pub fn set_alias(&mut self, thesis_id: DocumentId, new_alias: Alias) -> Result<()> {
-                    self.chest_transaction.theses_update(
+                    self.chest_transaction.theses_set(
                         thesis_id,
                         path_segments!("alias"),
                         serde_json::to_value(new_alias)?,
