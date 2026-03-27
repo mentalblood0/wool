@@ -843,7 +843,7 @@ macro_rules! define_sweater {
                             std::sync::OnceLock::new();
                         let command_first_line_regex = COMMAND_FIRST_LINE_REGEX.get_or_init(|| {
                             Regex::new(r#"^ *(\+|-|#|\^|@)(:? +([^ ]+))? *$"#)
-                                .with_context(|| "Can not compile regular expression for commands splitting")
+                                .with_context(|| "Can not compile regular expression for parsing first line of command")
                                 .unwrap()
                         });
                         if let Some(captures) = command_first_line_regex.captures(lines[0]) {

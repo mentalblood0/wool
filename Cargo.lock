@@ -112,7 +112,7 @@ checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 [[package]]
 name = "dream"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/dream#fd130d1b6e213cfb797608da2565fb078d02b664"
+source = "git+https://github.com/mentalblood0/dream#5d63f617bbd0e0ad05317b4336af2058dcea0cdd"
 dependencies = [
  "anyhow",
  "fallible-iterator",
@@ -252,7 +252,7 @@ dependencies = [
 [[package]]
 name = "lawn"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/lawn#9c24fc932a2c5f5fee4684fe170a126df5ae7ed8"
+source = "git+https://github.com/mentalblood0/lawn#767753e41c230ed4e67880e6b6cd2df7ebf6cfbd"
 dependencies = [
  "anyhow",
  "bincode",
@@ -480,7 +480,7 @@ dependencies = [
 [[package]]
 name = "serde-saphyr"
 version = "0.0.22"
-source = "git+https://github.com/bourumir-wyngs/serde-saphyr#c6696cd417026ab81699c29db216cee542af85bf"
+source = "git+https://github.com/bourumir-wyngs/serde-saphyr#c3ce7b50fdb0d4ecdcc379af195d7b53f2432958"
 dependencies = [
  "ahash",
  "annotate-snippets",
@@ -569,7 +569,7 @@ dependencies = [
 [[package]]
 name = "trove"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/trove#2fd8685466b0c029d52e80092a7383b1a3135a8e"
+source = "git+https://github.com/mentalblood0/trove#0193695367b61a79a65cecbc517258b81d7324a4"
 dependencies = [
  "anyhow",
  "base64",
@@ -614,9 +614,9 @@ checksum = "1292c0d970b54115d14f2492fe0170adf21d68a1de108eebc51c1df4f346a091"
 
 [[package]]
 name = "uuid"
-version = "1.22.0"
+version = "1.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a68d3c8f01c0cfa54a75291d83601161799e4a89a39e0929f4b0354d88757a37"
+checksum = "5ac8b6f42ead25368cf5b098aeb3dc8a1a2c05a3eee8a9a1a68c640edbfc79d9"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",
