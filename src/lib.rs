@@ -875,6 +875,10 @@ macro_rules! define_sweater {
                                         Command::AddThesis(thesis)
                                     }
                                     ('+', 4) => {
+                                        let kind = RelationKind(lines[2].to_string());
+                                        if !self.supported_relations_kinds.contains(&kind) {
+                                            return Result::Err(anyhow!("Can not parse relation for AddThesis command on {}-th paragraph {paragraph:?}: unsupported relation kind {kind:?}", paragraph_index + 1));
+                                        }
                                         let thesis = Thesis {
                                             alias: alias_option.clone(),
                                             content: Content::Relation(Relation {
@@ -884,9 +888,8 @@ macro_rules! define_sweater {
                                                     .with_context(|| {
                                                         format!(
                                                             "Can not parse relation for AddThesis command on \
-                                                             {}-th paragraph {:?}",
+                                                             {}-th paragraph {paragraph:?}",
                                                             paragraph_index + 1,
-                                                            paragraph
                                                         )
                                                     })?,
                                                 kind: RelationKind(lines[2].to_string()),
