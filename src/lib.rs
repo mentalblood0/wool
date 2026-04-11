@@ -590,10 +590,7 @@ macro_rules! define_sweater {
                             if part_index < self.references.len() {
                                 result_list.push(format!(
                                     "[{}]",
-                                    serde_json::to_value(&self.references[part_index])
-                                        .unwrap()
-                                        .as_str()
-                                        .unwrap()
+                                    format_reference(&self.references[part_index])?
                                 ));
                             }
                         }
@@ -1217,7 +1214,7 @@ mod tests {
             }
         }
         let result = Text::new(&result_string, aliases_resolver).unwrap();
-        assert_eq!(result.composed_raw().unwrap(), result_string);
+        assert_eq!(result.composed_raw(), result_string);
         result
     }
 
