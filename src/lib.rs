@@ -284,7 +284,7 @@ macro_rules! define_sweater {
                     if !self.chest_transaction.theses_contains_element(
                         thesis_id,
                         &search_path_segments!("tags", ()),
-                        &serde_json::to_value(tag.clone())?.try_into()?,
+                        &serde_json::to_value(tag.clone())?,
                     )? {
                         self.chest_transaction.theses_push(
                             thesis_id,
@@ -1245,7 +1245,7 @@ mod tests {
             "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",
             "r", "s", "t", "u", "v", "w", "x", "y", "z",
         ];
-        Tag((0..rng.generate_range(2..=8))
+        Tag((0..rng.generate_range(1..=2))
             .map(|_| LETTERS[rng.generate_range(0..LETTERS.len())])
             .collect())
     }
@@ -1256,6 +1256,11 @@ mod tests {
         previously_added_theses: &BTreeMap<DocumentId, Thesis>,
         transaction: &WriteTransaction,
     ) -> Thesis {
+        let mut tags = (0..rng.generate_range(2..10))
+            .map(|_| random_tag(rng))
+            .collect::<Vec<_>>();
+        tags.sort();
+        tags.dedup();
         Thesis {
             alias: None,
             content: {
@@ -1292,7 +1297,7 @@ mod tests {
                     }
                 }
             },
-            tags: vec![],
+            tags: tags,
         }
     }
 
@@ -1310,12 +1315,12 @@ mod tests {
                     } else {
                         rng.generate_range(1..=3)
                     };
-                    let mut aliases_resolver = AliasesResolver {
-                        read_able_transaction: transaction,
-                        known_aliases: BTreeMap::new(),
-                    };
                     match action_id {
                         1 => {
+                            let mut aliases_resolver = AliasesResolver {
+                                read_able_transaction: transaction,
+                                known_aliases: BTreeMap::new(),
+                            };
                             let thesis = {
                                 let mut result = random_thesis(
                                     &mut rng,
@@ -1334,12 +1339,12 @@ mod tests {
                                 result
                             };
                             thesis.validated()?;
+                            println!("add {:?}", thesis);
                             transaction.insert_thesis(thesis.clone())?;
                             for thesis_id_with_such_tags in transaction
                                 .iter_theses_ids_by_tags(&thesis.tags, &vec![], None)?
                                 .collect::<Vec<_>>()?
                             {
-                                dbg!(&thesis_id_with_such_tags);
                                 transaction.get_thesis(&thesis_id_with_such_tags)?.unwrap();
                             }
                             let thesis_id = thesis.id()?;
@@ -1349,15 +1354,28 @@ mod tests {
                                     transaction.where_referenced(&referenced_thesis_id)?;
                                 assert!(where_referenced.contains(&thesis_id));
                             }
-                            previously_added_theses.insert(thesis_id, thesis);
+                            previously_added_theses.insert(thesis_id.clone(), thesis);
+                            assert_eq!(
+                                &transaction.get_thesis(&thesis_id)?.unwrap(),
+                                previously_added_theses.get(&thesis_id).unwrap()
+                            );
                         }
                         2 => {
-                            let tag_to_add = random_tag(&mut rng);
                             let thesis_to_tag_id = previously_added_theses
                                 .keys()
                                 .nth(rng.generate_range(0..previously_added_theses.len()))
                                 .unwrap()
                                 .clone();
+                            let thesis_to_tag =
+                                previously_added_theses.get(&thesis_to_tag_id).unwrap();
+                            let tag_to_add = {
+                                let mut result = random_tag(&mut rng);
+                                while thesis_to_tag.tags.contains(&result) {
+                                    result = random_tag(&mut rng);
+                                }
+                                result
+                            };
+                            println!("tag {:?} with {:?}", thesis_to_tag_id, tag_to_add);
                             transaction.tag_thesis(&thesis_to_tag_id, tag_to_add.clone())?;
                             assert!(transaction
                                 .get_thesis(&thesis_to_tag_id)?
@@ -1369,6 +1387,10 @@ mod tests {
                                 .unwrap()
                                 .tags
                                 .push(tag_to_add);
+                            assert_eq!(
+                                &transaction.get_thesis(&thesis_to_tag_id)?.unwrap(),
+                                previously_added_theses.get(&thesis_to_tag_id).unwrap()
+                            );
                         }
                         3 => {
                             if let Some((thesis_to_untag_id, thesis_to_untag)) =
@@ -1377,10 +1399,15 @@ mod tests {
                                     .find(|(_, thesis)| !thesis.tags.is_empty())
                                     .map(|(id, thesis)| (id.clone(), thesis.clone()))
                             {
+                                assert_eq!(
+                                    transaction.get_thesis(&thesis_to_untag_id)?.unwrap(),
+                                    thesis_to_untag
+                                );
                                 let tag_to_remove_index =
                                     rng.generate_range(0..thesis_to_untag.tags.len());
                                 let tag_to_remove =
                                     thesis_to_untag.tags[tag_to_remove_index].clone();
+                                println!("untag {:?} with {:?}", thesis_to_untag_id, tag_to_remove);
                                 transaction.untag_thesis(&thesis_to_untag_id, &tag_to_remove)?;
                                 assert!(!transaction
                                     .get_thesis(&thesis_to_untag_id)?
@@ -1392,6 +1419,10 @@ mod tests {
                                     .unwrap()
                                     .tags
                                     .remove(tag_to_remove_index);
+                                assert_eq!(
+                                    &transaction.get_thesis(&thesis_to_untag_id)?.unwrap(),
+                                    previously_added_theses.get(&thesis_to_untag_id).unwrap()
+                                );
                             }
                         }
                         _ => {}
