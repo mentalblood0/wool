@@ -1335,6 +1335,13 @@ mod tests {
                             };
                             thesis.validated()?;
                             transaction.insert_thesis(thesis.clone())?;
+                            for thesis_id_with_such_tags in transaction
+                                .iter_theses_ids_by_tags(&thesis.tags, &vec![], None)?
+                                .collect::<Vec<_>>()?
+                            {
+                                dbg!(&thesis_id_with_such_tags);
+                                transaction.get_thesis(&thesis_id_with_such_tags)?.unwrap();
+                            }
                             let thesis_id = thesis.id()?;
                             assert_eq!(transaction.get_thesis(&thesis_id)?.unwrap(), thesis);
                             for referenced_thesis_id in thesis.references() {
