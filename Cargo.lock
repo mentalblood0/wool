@@ -112,7 +112,7 @@ checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
 [[package]]
 name = "dream"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/dream#5d63f617bbd0e0ad05317b4336af2058dcea0cdd"
+source = "git+https://github.com/mentalblood0/dream#fa87bd0dc9a7073c11f92e08388e5f5c285ce58d"
 dependencies = [
  "anyhow",
  "fallible-iterator",
@@ -569,7 +569,7 @@ dependencies = [
 [[package]]
 name = "trove"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/trove#0193695367b61a79a65cecbc517258b81d7324a4"
+source = "git+https://github.com/mentalblood0/trove#29d301c845859e3e5f4691aa291cecfdb254854f"
 dependencies = [
  "anyhow",
  "base64",

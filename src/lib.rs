@@ -299,7 +299,7 @@ macro_rules! define_sweater {
                     if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
                         thesis_id,
                         &search_path_segments!("tags", ()),
-                        &serde_json::to_value(tag)?.try_into()?,
+                        &serde_json::to_value(tag)?,
                     )? {
                         self.chest_transaction
                             .theses_remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
@@ -1341,11 +1341,12 @@ mod tests {
                             thesis.validated()?;
                             println!("add {:?}", thesis);
                             transaction.insert_thesis(thesis.clone())?;
-                            for thesis_id_with_such_tags in transaction
+                            for thesis_with_such_tags_id in transaction
                                 .iter_theses_ids_by_tags(&thesis.tags, &vec![], None)?
                                 .collect::<Vec<_>>()?
                             {
-                                transaction.get_thesis(&thesis_id_with_such_tags)?.unwrap();
+                                println!("thesis_with_such_tags_id = {thesis_with_such_tags_id:?}");
+                                transaction.get_thesis(&thesis_with_such_tags_id)?.unwrap();
                             }
                             let thesis_id = thesis.id()?;
                             assert_eq!(transaction.get_thesis(&thesis_id)?.unwrap(), thesis);
