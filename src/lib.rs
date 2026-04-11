@@ -571,13 +571,14 @@ macro_rules! define_sweater {
                     Ok(result)
                 }
 
-                pub fn composed(&self) -> String {
+                pub fn composed<F>(&self, format_reference: F) -> Result<String>
+                where F: Fn(&DocumentId) -> Result<String> {
                     let mut result_list = Vec::new();
                     if self.start_with_reference {
                         for (reference_index, reference) in self.references.iter().enumerate() {
                             result_list.push(format!(
                                 "[{}]",
-                                serde_json::to_value(reference).unwrap().as_str().unwrap()
+                                format_reference(reference)?
                             ));
                             if reference_index < self.raw_text_parts.len() {
                                 result_list.push(self.raw_text_parts[reference_index].0.clone());
@@ -597,46 +598,26 @@ macro_rules! define_sweater {
                             }
                         }
                     }
-                    result_list.concat()
+                    Ok(result_list.concat())
+                }
+
+                pub fn composed_raw(&self) -> String {
+                    self.composed(
+                        |referenced_thesis_id|
+                            Ok(serde_json::to_value(referenced_thesis_id).unwrap().as_str().unwrap().to_string())
+                    ).unwrap()
                 }
 
                 pub fn composed_with_aliases(
                     &self,
                     read_able_transaction: &dyn ReadTransactionMethods<'a>,
                 ) -> Result<String> {
-                    let mut result_list = Vec::new();
-                    if self.start_with_reference {
-                        for (reference_index, reference) in self.references.iter().enumerate() {
-                            result_list.push(format!(
-                                "[{}]",
-                                if let Some(alias) = read_able_transaction.get_alias_by_thesis_id(reference)? {
+                    self.composed(|reference|
+                                Ok(if let Some(alias) = read_able_transaction.get_alias_by_thesis_id(reference)? {
                                     alias.0
                                 } else {
                                     reference.to_string()
-                                }
-                            ));
-                            if reference_index < self.raw_text_parts.len() {
-                                result_list.push(self.raw_text_parts[reference_index].0.clone());
-                            }
-                        }
-                    } else {
-                        for (part_index, part) in self.raw_text_parts.iter().enumerate() {
-                            result_list.push(part.0.clone());
-                            if part_index < self.references.len() {
-                                result_list.push(format!(
-                                    "[{}]",
-                                    if let Some(alias) = read_able_transaction
-                                        .get_alias_by_thesis_id(&self.references[part_index])?
-                                    {
-                                        alias.0
-                                    } else {
-                                        self.references[part_index].to_string()
-                                    }
-                                ));
-                            }
-                        }
-                    }
-                    Ok(result_list.concat())
+                                }))
                 }
 
                 pub fn validated(&self) -> Result<&Self> {
@@ -656,7 +637,7 @@ macro_rules! define_sweater {
             impl Content {
                 pub fn id(&self) -> Result<DocumentId> {
                     let source = match self {
-                        Content::Text(text) => text.composed().bytes().collect(),
+                        Content::Text(text) => text.composed_raw().bytes().collect(),
                         Content::Relation(relation) => {
                             encode_to_vec(relation, config::standard()).with_context(
                                 || {
@@ -1236,7 +1217,7 @@ mod tests {
             }
         }
         let result = Text::new(&result_string, aliases_resolver).unwrap();
-        assert_eq!(result.composed(), result_string);
+        assert_eq!(result.composed_raw().unwrap(), result_string);
         result
     }
 
