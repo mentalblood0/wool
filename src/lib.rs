@@ -1341,12 +1341,18 @@ mod tests {
                             thesis.validated()?;
                             println!("add {:?}", thesis);
                             transaction.insert_thesis(thesis.clone())?;
-                            for thesis_with_such_tags_id in transaction
-                                .iter_theses_ids_by_tags(&thesis.tags, &vec![], None)?
-                                .collect::<Vec<_>>()?
-                            {
-                                println!("thesis_with_such_tags_id = {thesis_with_such_tags_id:?}");
-                                transaction.get_thesis(&thesis_with_such_tags_id)?.unwrap();
+                            for take_tags_amount in 1..thesis.tags.len() {
+                                let taken_tags = thesis.tags[..take_tags_amount].to_vec();
+                                for thesis_with_such_tags_id in transaction
+                                    .iter_theses_ids_by_tags(&taken_tags, &vec![], None)?
+                                    .collect::<Vec<_>>()?
+                                {
+                                    let thesis_with_such_tags =
+                                        transaction.get_thesis(&thesis_with_such_tags_id)?.unwrap();
+                                    for tag in taken_tags.iter() {
+                                        assert!(thesis_with_such_tags.tags.contains(&tag));
+                                    }
+                                }
                             }
                             let thesis_id = thesis.id()?;
                             assert_eq!(transaction.get_thesis(&thesis_id)?.unwrap(), thesis);
