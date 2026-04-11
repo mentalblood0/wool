@@ -1256,7 +1256,7 @@ mod tests {
         previously_added_theses: &BTreeMap<DocumentId, Thesis>,
         transaction: &WriteTransaction,
     ) -> Thesis {
-        let mut tags = (0..rng.generate_range(2..10))
+        let mut tags = (0..rng.generate_range(0..10))
             .map(|_| random_tag(rng))
             .collect::<Vec<_>>();
         tags.sort();
