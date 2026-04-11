@@ -686,7 +686,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
             pub struct Tag(pub String);
 
             impl Tag {
