@@ -392,7 +392,7 @@ macro_rules! define_sweater {
                     } else {
                         Err(anyhow!(
                             "Alias must be sequence of one or more non-whitespace characters, so {:?} does \
-                             not seem to be text",
+                             not seem to be alias",
                             self.0
                         ))
                     }
@@ -415,7 +415,7 @@ macro_rules! define_sweater {
                     } else {
                         Err(anyhow!(
                             "Text part around references must be Cyrillic/Latin text: letters, whitespaces, \
-                             punctuation ,-:.'\", so {:?} does not seem to be text",
+                             punctuation ,-:.'\", so {:?} does not seem to be text part",
                             self.0
                         ))
                     }
@@ -548,7 +548,7 @@ macro_rules! define_sweater {
                                 aliases_resolver
                                     .get_thesis_id_by_reference(&Reference::Alias(Alias(
                                         alias_string.to_string(),
-                                    )))
+                                    ).validated()?.to_owned()))
                                     .with_context(|| {
                                         anyhow!(
                                             "Can not parse text {:?} with alias {:?} because do not know such \
