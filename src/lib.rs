@@ -354,7 +354,7 @@ macro_rules! define_sweater {
                     Ok(())
                 }
 
-                pub fn execute_command(&mut self, command: &Command) -> Result<&Self> {
+                pub fn execute_command(&mut self, command: &Box<dyn Command>) -> Result<&Self> {
                     match command {
                         Command::AddThesis(thesis) => self.insert_thesis(thesis.clone())?,
                         Command::RemoveThesis(thesis_id) => self.remove_thesis(thesis_id)?,
@@ -743,217 +743,316 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-            pub enum Command {
-                AddThesis(Thesis),
-                RemoveThesis(DocumentId),
-                AddTags(DocumentId, Vec<Tag>),
-                RemoveTags(DocumentId, Vec<Tag>),
-                SetAlias(DocumentId, Alias),
+            pub trait Command {
+                fn validated(self) -> Result<Self>
+                where Self: Sized;
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    supported_relations_kinds: &BTreeSet<RelationKind>,
+                ) -> Result<Self>
+                where Self: Sized;
             }
 
-            impl Command {
-                pub fn validated(&self) -> Result<&Self> {
-                    match self {
-                        Command::AddThesis(thesis) => {
-                            thesis.validated()?;
+            struct AddTextThesisWithAlias {
+                text: Text,
+                alias: Alias
+            }
+
+            impl Command for AddTextThesisWithAlias {
+                fn validated(self) -> Result<Self> {
+                    self.text.validated()?;
+                    self.alias.validated()?;
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+) +alias +(.+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add text thesis with alias command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let alias_capture = &captures[1];
+                        let thesis_text_capture = &captures[2];
+                        Ok(Self {
+                            text: Text::new(&thesis_text_capture, aliases_resolver)?,
+                            alias: Alias(alias_capture.to_string()).validated()?.to_owned()
+                        }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis with alias command"))
+                    }
+                }
+            }
+
+            struct AddTextThesisWithoutAlias {
+                text: Text
+            }
+
+            impl Command for AddTextThesisWithoutAlias {
+                fn validated(self) -> Result<Self> {
+                    self.text.validated()?;
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(.+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add text thesis without alias command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let thesis_text_capture = &captures[1];
+                        let thesis_text = Text::new(thesis_text_capture, aliases_resolver)?;
+                        Ok(Self { text: thesis_text }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis without alias command"))
+                    }
+                }
+            }
+
+            struct AddRelationThesisWithAlias {
+                relation: Relation,
+                alias: Alias
+            }
+
+            impl Command for AddRelationThesisWithAlias {
+                fn validated(self) -> Result<Self> {
+                    self.relation.validated()?;
+                    self.alias.validated()?;
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+) alias +(\S+) +(.+) +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add relation thesis with alias command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let alias_capture = captures[1].to_string();
+                        let from_reference_capture = &captures[2];
+                        let relation_kind_capture = &captures[3];
+                        let to_reference_capture = &captures[4];
+                        let relation_kind = RelationKind(relation_kind_capture.to_string());
+                        if !supported_relations_kinds.contains(&relation_kind) {
+                            return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        Command::RemoveThesis(_) => {}
-                        Command::AddTags(_, tags) => {
-                            for tag in tags.iter() {
-                                tag.validated()?;
-                            }
+                        Ok(Self {
+                            relation: Relation {
+                                from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
+                                kind: relation_kind,
+                                to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
+                            },
+                            alias: Alias(alias_capture).validated()?.to_owned()
+                        }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis with alias command"))
+                    }
+                }
+            }
+
+            struct AddRelationThesisWithoutAlias {
+                relation: Relation
+            }
+
+            impl Command for AddRelationThesisWithoutAlias {
+                fn validated(self) -> Result<Self> {
+                    self.relation.validated()?;
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+) +(.+) +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add relation thesis without alias command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let from_reference_capture = &captures[1];
+                        let relation_kind_capture = &captures[2];
+                        let to_reference_capture = &captures[3];
+                        let relation_kind = RelationKind(relation_kind_capture.to_string());
+                        if !supported_relations_kinds.contains(&relation_kind) {
+                            return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        Command::RemoveTags(_, tags) => {
-                            for tag in tags.iter() {
-                                tag.validated()?;
-                            }
-                        }
-                        Command::SetAlias(_, alias) => {
-                            alias.validated()?;
-                        }
+                        Ok(Command::AddThesis(Thesis {
+                            alias: None,
+                            content: Content::Relation(Relation {
+                                from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
+                                kind: relation_kind,
+                                to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
+                            }),
+                            tags: vec![],
+                        }).validated()?.to_owned())
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis without alias command"))
+                    }
+                }
+            }
+
+            struct SetAlias {
+                thesis_id: DocumentId,
+                alias: Alias
+            }
+
+            impl Command for SetAlias {
+                fn validated(self) -> Result<Self> {
+                    self.alias.validated()?;
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+) +alias +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing set alias command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let alias_capture = &captures[1];
+                        let reference_capture = &captures[2];
+                        Ok(Self {
+                            thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(&reference_capture)?)?,
+                            alias: Alias(alias_capture.to_string()).validated()?.to_owned()
+                        }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as set alias command"))
+                    }
+                }
+            }
+
+            struct AddTags {
+                thesis_id: DocumentId,
+                tags: Vec<Tag>
+            }
+
+            impl Command for AddTags {
+                fn validated(self) -> Result<Self> {
+                    for tag in self.tags.iter() {
+                        tag.validated()?;
                     }
                     Ok(self)
                 }
-            }
 
-            pub struct CommandsIterator<'a> {
-                supported_relations_kinds: &'a BTreeSet<RelationKind>,
-                paragraphs_iterator: Box<dyn FallibleIterator<Item = (usize, &'a str), Error = Error> + 'a>,
-                aliases_resolver: &'a mut AliasesResolver<'a>,
-            }
-
-            impl<'a> CommandsIterator<'a> {
-                pub fn new(
-                    input: &'a str,
-                    supported_relations_kinds: &'a BTreeSet<RelationKind>,
+                fn parse<'a>(
+                    line: &str,
                     aliases_resolver: &'a mut AliasesResolver<'a>,
-                ) -> Self {
-                    static COMMANDS_SPLIT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-                    let commands_split_regex = COMMANDS_SPLIT_REGEX.get_or_init(|| {
-                        Regex::new(r#"(\r?\n|\r){2,}"#)
-                            .with_context(|| "Can not compile regular expression for commands splitting")
+                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+(:? +\S+)+) +tag +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add tag command regex")
                             .unwrap()
                     });
-                    Self {
-                        supported_relations_kinds,
-                        aliases_resolver: aliases_resolver,
-                        paragraphs_iterator: Box::new(fallible_iterator::convert(
-                            commands_split_regex
-                                .split(input)
-                                .map(|paragraph| paragraph.trim())
-                                .filter(|paragraph| !paragraph.is_empty())
-                                .enumerate()
-                                .map(|index_and_paragraph| Ok(index_and_paragraph)),
-                        )),
+                    if let Some(captures) = regex.captures(line) {
+                        let tags_capture = &captures[1];
+                        let reference_capture = &captures[2];
+                        Ok(Self {
+                            thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(reference_capture)?)?,
+                            tags: tags_capture
+                                .split(' ')
+                                .map(|tag_string| Tag(tag_string.to_string()))
+                                .collect(),
+                        }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
                     }
                 }
             }
 
-            impl<'a> FallibleIterator for CommandsIterator<'a> {
-                type Item = Command;
-                type Error = Error;
+            struct RemoveTags {
+                thesis_id: DocumentId,
+                tags: Vec<Tag>
+            }
 
-                fn next(&mut self) -> Result<Option<Self::Item>> {
-                    if let Some((paragraph_index, paragraph)) = self.paragraphs_iterator.next()? {
-                        let lines = paragraph.split('\n').collect::<Vec<_>>();
-                        static COMMAND_FIRST_LINE_REGEX: std::sync::OnceLock<Regex> =
-                            std::sync::OnceLock::new();
-                        let command_first_line_regex = COMMAND_FIRST_LINE_REGEX.get_or_init(|| {
-                            Regex::new(r#"^ *(\+|-|#|\^|@)(:? +([^ ]+))? *$"#)
-                                .with_context(|| "Can not compile regular expression for parsing first line of command")
-                                .unwrap()
-                        });
-                        if let Some(captures) = command_first_line_regex.captures(lines[0]) {
-                            let operation_char = captures[1].chars().next().unwrap();
-                            let alias_option = captures
-                                .get(3)
-                                .map(|alias_match| Alias(alias_match.as_str().to_string()));
-                            if let Some(ref alias) = alias_option {
-                                alias.validated().with_context(|| {
-                                    format!(
-                                        "Can not parse first line {:?} in {}-nth paragraph {:?}",
-                                        lines[0],
-                                        paragraph_index + 1,
-                                        paragraph
-                                    )
-                                })?;
-                            }
-                            Ok(Some(
-                                match (operation_char, lines.len()) {
-                                    ('+', 2) => {
-                                        let thesis = Thesis {
-                                            alias: alias_option.clone(),
-                                            content: Content::Text(Text::new(lines[1], self.aliases_resolver)?),
-                                            tags: vec![],
-                                        };
-                                        if let Some(ref alias) = alias_option {
-                                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
-                                        }
-                                        Command::AddThesis(thesis)
-                                    }
-                                    ('+', 4) => {
-                                        let kind = RelationKind(lines[2].to_string());
-                                        if !self.supported_relations_kinds.contains(&kind) {
-                                            return Result::Err(anyhow!("Can not parse relation for AddThesis command on {}-th paragraph {paragraph:?}: unsupported relation kind {kind:?}", paragraph_index + 1));
-                                        }
-                                        let thesis = Thesis {
-                                            alias: alias_option.clone(),
-                                            content: Content::Relation(Relation {
-                                                from: self
-                                                    .aliases_resolver
-                                                    .get_thesis_id_by_reference(&Reference::new(lines[1])?)
-                                                    .with_context(|| {
-                                                        format!(
-                                                            "Can not parse relation for AddThesis command on \
-                                                             {}-th paragraph {paragraph:?}",
-                                                            paragraph_index + 1,
-                                                        )
-                                                    })?,
-                                                kind: RelationKind(lines[2].to_string()),
-                                                to: self
-                                                    .aliases_resolver
-                                                    .get_thesis_id_by_reference(&Reference::new(lines[3])?)?,
-                                            }),
-                                            tags: vec![],
-                                        };
-                                        if let Some(ref alias) = alias_option {
-                                            self.aliases_resolver.remember(alias.clone(), thesis.id()?);
-                                        }
-                                        Command::AddThesis(thesis)
-                                    }
-                                    ('-', 2) => Command::RemoveThesis(
-                                        self.aliases_resolver
-                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                                    ),
-                                    ('#', 3..) => Command::AddTags(
-                                        self.aliases_resolver
-                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                                        lines[2..]
-                                            .iter()
-                                            .map(|tag_string| Tag(tag_string.to_string()))
-                                            .collect(),
-                                    ),
-                                    ('^', 3..) => Command::RemoveTags(
-                                        self.aliases_resolver
-                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?,
-                                        lines[2..]
-                                            .iter()
-                                            .map(|tag_string| Tag(tag_string.to_string()))
-                                            .collect(),
-                                    ),
-                                    ('@', 2) => {
-                                        let thesis_id = self
-                                            .aliases_resolver
-                                            .get_thesis_id_by_reference(&Reference::new(lines[1])?)?;
-                                        let alias = alias_option.ok_or_else(|| {
-                                            anyhow!(
-                                                "Can not parse {}-th paragraph {paragraph:?}: looks like it \
-                                                 is command for setting alias, yet there is no new alias \
-                                                 provided in first line after '@' character",
-                                                paragraph_index + 1
-                                            )
-                                        })?;
-                                        self.aliases_resolver
-                                            .remember(alias.clone(), thesis_id.clone());
-                                        Command::SetAlias(thesis_id, alias)
-                                    }
-                                    _ => {
-                                        return Err(anyhow!(
-                                            "Unsupported operation character and lines count combination \
-                                             ({:?}, {}) in first line {:?} of {}-th paragraph {:?}, supported \
-                                             combinations are ('+', 2) for adding text thesis, ('+', 4) for \
-                                             adding relation thesis, ('-', 2) for removing thesis, ('#', 3) \
-                                             for adding tag, ('^', 3) for removing tag",
-                                            operation_char,
-                                            lines.len(),
-                                            lines[0],
-                                            paragraph_index + 1,
-                                            paragraph
-                                        ));
-                                    }
-                                }
-                                .validated()
-                                .with_context(|| {
-                                    format!(
-                                        "Invalid command parsed from {}-th paragraph {:?}",
-                                        paragraph_index + 1,
-                                        paragraph
-                                    )
-                                })?
-                                .to_owned(),
-                            ))
-                        } else {
-                            Err(anyhow!(
-                                "Can not parse first line {:?} in {}-th paragraph {:?}",
-                                lines[0],
-                                paragraph_index + 1,
-                                paragraph
-                            ))
-                        }
-                    } else {
-                        Ok(None)
+            impl Command for RemoveTags {
+                fn validated(self) -> Result<Self> {
+                    for tag in self.tags.iter() {
+                        tag.validated()?;
                     }
+                    Ok(self)
+                }
+
+                fn parse<'a>(
+                    line: &str,
+                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(\S+(:? +\S+)+) +not tag +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression for parsing add untag command regex")
+                            .unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let tags_capture = &captures[1];
+                        let reference_capture = &captures[2];
+                        Ok(Self {
+                            thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(reference_capture)?)?,
+                            tags: tags_capture
+                                .split(' ')
+                                .map(|tag_string| Tag(tag_string.to_string()))
+                                .collect(),
+                        }.validated()?)
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
+                    }
+                }
+            }
+
+            pub fn parse_command(
+                line: &str,
+                aliases_resolver: &'a mut AliasesResolver<'a>,
+                supported_relations_kinds: &BTreeSet<RelationKind>
+            ) -> Result<Box<dyn Command>> {
+                let results = [
+                    AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                ];
+                let successfull_results = results.into_iter().filter(|result| result.is_ok()).map(|result| result.unwrap()).collect::<Vec<_>>();
+                if successfull_results.len() > 1 {
+                    Err(anyhow!("Ambiguous command line {line:?}"))
+                } else {
+                    successfull_results.into_iter().next().ok_or_else(|| anyhow!("Can not parse command line {line:?}"))
                 }
             }
 
