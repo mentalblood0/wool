@@ -383,7 +383,7 @@ macro_rules! define_sweater {
                 pub fn validated(&self) -> Result<&Self> {
                     static ALIAS_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
                     let sentence_regex = ALIAS_REGEX.get_or_init(|| {
-                        Regex::new(r#"^[^\[\]]+$"#)
+                        Regex::new(r#"^[^ \[\]]+$"#)
                             .with_context(|| "Can not compile regular expression for thesis alias validation")
                             .unwrap()
                     });
@@ -391,7 +391,7 @@ macro_rules! define_sweater {
                         Ok(self)
                     } else {
                         Err(anyhow!(
-                            "Alias must be sequence of one or more non-whitespace characters, so {:?} does \
+                            "Alias must be sequence of one or more non-whitespace characters except '[' and ']', so {:?} does \
                              not seem to be alias",
                             self.0
                         ))
