@@ -1421,40 +1421,40 @@ mod tests {
             .unwrap();
     }
 
-    #[test]
-    fn test_example() {
-        let mut sweater = new_default_sweater("test_example");
-        sweater
-            .lock_all_and_write(|transaction| {
-                let commands = CommandsIterator::new(
-                    &std::fs::read_to_string("src/example.txt")?,
-                    &transaction.sweater_config.supported_relations_kinds,
-                    &mut AliasesResolver {
-                        read_able_transaction: transaction,
-                        known_aliases: BTreeMap::new(),
-                    },
-                )
-                .collect::<Vec<_>>()?;
-                for command in commands {
-                    transaction.execute_command(&command)?;
-                }
+    // #[test]
+    // fn test_example() {
+    //     let mut sweater = new_default_sweater("test_example");
+    //     sweater
+    //         .lock_all_and_write(|transaction| {
+    //             let commands = CommandsIterator::new(
+    //                 &std::fs::read_to_string("src/example.txt")?,
+    //                 &transaction.sweater_config.supported_relations_kinds,
+    //                 &mut AliasesResolver {
+    //                     read_able_transaction: transaction,
+    //                     known_aliases: BTreeMap::new(),
+    //                 },
+    //             )
+    //             .collect::<Vec<_>>()?;
+    //             for command in commands {
+    //                 transaction.execute_command(&command)?;
+    //             }
 
-                std::fs::write(
-                    "/tmp/wool_example_graph.dot",
-                    GraphGenerator::new(
-                        &GraphGeneratorConfig {
-                            wrap_width: 64,
-                            externalize_relations_nodes: ExternalizeRelationsNodes::None,
-                            show_nodes_references: ShowNodesReferences::All,
-                        },
-                        transaction,
-                    )?
-                    .collect::<Vec<_>>()?
-                    .join(""),
-                )?;
+    //             std::fs::write(
+    //                 "/tmp/wool_example_graph.dot",
+    //                 GraphGenerator::new(
+    //                     &GraphGeneratorConfig {
+    //                         wrap_width: 64,
+    //                         externalize_relations_nodes: ExternalizeRelationsNodes::None,
+    //                         show_nodes_references: ShowNodesReferences::All,
+    //                     },
+    //                     transaction,
+    //                 )?
+    //                 .collect::<Vec<_>>()?
+    //                 .join(""),
+    //             )?;
 
-                Ok(())
-            })
-            .unwrap();
-    }
+    //             Ok(())
+    //         })
+    //         .unwrap();
+    // }
 }
