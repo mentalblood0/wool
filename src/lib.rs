@@ -745,7 +745,7 @@ macro_rules! define_sweater {
                 fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>;
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct AddTextThesisWithAlias(pub Thesis);
 
             #[typetag::serde]
@@ -788,7 +788,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct AddTextThesisWithoutAlias(pub Thesis);
 
             #[typetag::serde]
@@ -827,7 +827,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct AddRelationThesisWithAlias(pub Thesis);
 
             #[typetag::serde]
@@ -880,7 +880,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct AddRelationThesisWithoutAlias(pub Thesis);
 
             #[typetag::serde]
@@ -931,7 +931,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct SetAlias {
                 thesis_id: DocumentId,
                 alias: Alias
@@ -975,7 +975,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct AddTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
@@ -1022,7 +1022,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             struct RemoveTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
