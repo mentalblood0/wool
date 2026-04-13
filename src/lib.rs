@@ -30,6 +30,7 @@ macro_rules! define_sweater {
                     trove::Document,
                     anyhow::{anyhow, Context, Result, Error},
                     regex::Regex,
+                    typetag
                 },
             };
 
