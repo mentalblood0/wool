@@ -57,7 +57,7 @@ An English words sequence without punctuation, e.g. `may be`, `therefore`
 
 ## Commands
 
-One commands occupies one line. See example [`here`](src/example.txt)
+Each command occupies one and only one line. See example [`here`](src/example.txt)
 
 `/may Релятивизм опасен` - add **thesis** with **text** `Релятивизм опасен`
 
