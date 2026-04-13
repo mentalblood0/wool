@@ -4,6 +4,7 @@ pub extern crate html_escape;
 pub extern crate regex;
 pub extern crate serde;
 pub extern crate trove;
+pub extern crate typetag;
 
 pub use trove::bincode;
 pub use trove::xxhash_rust;
@@ -729,6 +730,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[typetag::serde]
             pub trait Command: std::fmt::Debug {
                 fn validated(self) -> Result<Self>
                 where Self: Sized;
@@ -743,9 +745,10 @@ macro_rules! define_sweater {
                 fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>;
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct AddTextThesisWithAlias(pub Thesis);
 
+            #[typetag::serde]
             impl Command for AddTextThesisWithAlias {
                 fn validated(self) -> Result<Self> {
                     self.0.validated()?;
@@ -785,9 +788,10 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct AddTextThesisWithoutAlias(pub Thesis);
 
+            #[typetag::serde]
             impl Command for AddTextThesisWithoutAlias {
                 fn validated(self) -> Result<Self> {
                     self.0.validated()?;
@@ -823,9 +827,10 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct AddRelationThesisWithAlias(pub Thesis);
 
+            #[typetag::serde]
             impl Command for AddRelationThesisWithAlias {
                 fn validated(self) -> Result<Self> {
                     self.0.validated()?;
@@ -875,9 +880,10 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct AddRelationThesisWithoutAlias(pub Thesis);
 
+            #[typetag::serde]
             impl Command for AddRelationThesisWithoutAlias {
                 fn validated(self) -> Result<Self> {
                     self.0.validated()?;
@@ -925,12 +931,13 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct SetAlias {
                 thesis_id: DocumentId,
                 alias: Alias
             }
 
+            #[typetag::serde]
             impl Command for SetAlias {
                 fn validated(self) -> Result<Self> {
                     self.alias.validated()?;
@@ -968,12 +975,13 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct AddTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
             }
 
+            #[typetag::serde]
             impl Command for AddTags {
                 fn validated(self) -> Result<Self> {
                     for tag in self.tags.iter() {
@@ -1014,12 +1022,13 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug)]
+            #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
             struct RemoveTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
             }
 
+            #[typetag::serde]
             impl Command for RemoveTags {
                 fn validated(self) -> Result<Self> {
                     for tag in self.tags.iter() {
@@ -1582,9 +1591,10 @@ mod tests {
                         &transaction.sweater_config.supported_relations_kinds,
                     )?);
                 }
-                for command in commands {
+                for command in commands.iter() {
                     command.execute(transaction)?;
                 }
+                serde_json::to_string(&commands)?;
 
                 std::fs::write(
                     "/tmp/wool_example_graph.dot",
