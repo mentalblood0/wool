@@ -60,11 +60,17 @@ An English words sequence without punctuation, e.g. `may be`, `therefore`
 If there is more then one command to parse, they must be delimited with two or more line breaks, e.g. see [`src/example.txt`](src/example.txt)
 
 `/may Релятивизм опасен` - add **thesis** with **text** `Релятивизм опасен`
+
 `/may R alias Общий релятивизм` - add **thesis**-**text** `Общий релятивизм` **alias**ed by `R`
+
 `/may R-r includes (R-r).d` - add **thesis**-**relation** from `R-r` to `(R-r).d` by **relation kind** `includes`
+
 `/may ((A1.1.2)/(R-r)).3.1 alias R includes A` - add **thesis**-**relation** from `R` to `A` by **relation kind** `includes` **alias**ed by `((A1.1.2)/(R-r)).3.1`
+
 `/may total truth tag (R-r).0` - add tags `total` and `truth` to **thesis** with alias `(R-r).0`
+
 `/may total truth not tag (R-r).0` - remove tags `total` and `truth` from **thesis** with alias `(R-r).0`
+
 `/may (R-r).0 alias (R-r).0_lalala` - set **alias** `(R-r).0` for thesis with alias `(R-r).0_lalala`
 
 Thesis can have no alias or one alias, so setting alias for already aliased thesis will replace it's alias. Internally theses are reference and relate to each other using theses identifiers, so replacing aliases won't break anything
