@@ -746,7 +746,7 @@ macro_rules! define_sweater {
                 fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>;
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct AddTextThesisWithAlias(pub Thesis);
 
             #[typetag::serde]
@@ -789,7 +789,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct AddTextThesisWithoutAlias(pub Thesis);
 
             #[typetag::serde]
@@ -828,7 +828,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct AddRelationThesisWithAlias(pub Thesis);
 
             #[typetag::serde]
@@ -881,7 +881,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct AddRelationThesisWithoutAlias(pub Thesis);
 
             #[typetag::serde]
@@ -932,7 +932,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct SetAlias {
                 thesis_id: DocumentId,
                 alias: Alias
@@ -976,7 +976,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct AddTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
@@ -1023,7 +1023,7 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
             struct RemoveTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
