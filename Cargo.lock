@@ -480,7 +480,7 @@ dependencies = [
 [[package]]
 name = "serde-saphyr"
 version = "0.0.23"
-source = "git+https://github.com/bourumir-wyngs/serde-saphyr#72c90d2df5e3f063e51e0446b6d9767e085fa785"
+source = "git+https://github.com/bourumir-wyngs/serde-saphyr#0802d2713b54cf444a554ce849b56400b6188012"
 dependencies = [
  "ahash",
  "annotate-snippets",
@@ -569,7 +569,7 @@ dependencies = [
 [[package]]
 name = "trove"
 version = "0.1.0"
-source = "git+https://github.com/mentalblood0/trove#29d301c845859e3e5f4691aa291cecfdb254854f"
+source = "git+https://github.com/mentalblood0/trove#b146aa0270f9d56928872454b20f93a775fd7145"
 dependencies = [
  "anyhow",
  "base64",

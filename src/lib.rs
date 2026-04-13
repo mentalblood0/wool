@@ -280,29 +280,36 @@ macro_rules! define_sweater {
                     }
                 }
 
-                pub fn tag_thesis(&mut self, thesis_id: &DocumentId, tag: Tag) -> Result<()> {
-                    if !self.chest_transaction.theses_contains_element(
-                        thesis_id,
-                        &search_path_segments!("tags", ()),
-                        &serde_json::to_value(tag.clone())?,
-                    )? {
+                pub fn add_tags(&mut self, thesis_id: &DocumentId, tags: Vec<Tag>) -> Result<()> {
+                    let new_tags = fallible_iterator::convert(
+                        tags.into_iter().map(|tag| Ok::<_, anyhow::Error>(tag))
+                    ).map(|tag| serde_json::to_value(tag).map_err(Into::into))
+                    .filter(
+                        |tag_json| Ok(!self.chest_transaction.theses_contains_element(
+                            thesis_id,
+                            &search_path_segments!("tags", ()),
+                            tag_json
+                        )?)
+                    )
+                    .collect::<Vec<_>>()?;
                         self.chest_transaction.theses_push(
                             thesis_id,
-                            &path_segments!("tags"),
-                            serde_json::to_value(tag)?,
+                            path_segments!("tags"),
+                            new_tags,
                         )?;
-                    }
                     Ok(())
                 }
 
-                pub fn untag_thesis(&mut self, thesis_id: &DocumentId, tag: &Tag) -> Result<()> {
-                    if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
-                        thesis_id,
-                        &search_path_segments!("tags", ()),
-                        &serde_json::to_value(tag)?,
-                    )? {
-                        self.chest_transaction
-                            .theses_remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
+                pub fn remove_tags(&mut self, thesis_id: &DocumentId, tags: &Vec<Tag>) -> Result<()> {
+                    for tag in tags {
+                        if let Some(tag_index_in_array) = self.chest_transaction.theses_get_element_index(
+                            thesis_id,
+                            &search_path_segments!("tags", ()),
+                            &serde_json::to_value(tag)?,
+                        )? {
+                            self.chest_transaction
+                                .theses_remove(thesis_id, &path_segments!("tags", tag_index_in_array))?;
+                        }
                     }
                     Ok(())
                 }
@@ -352,27 +359,6 @@ macro_rules! define_sweater {
                         serde_json::to_value(new_alias)?,
                     )?;
                     Ok(())
-                }
-
-                pub fn execute_command(&mut self, command: &Box<dyn Command>) -> Result<&Self> {
-                    match command {
-                        Command::AddThesis(thesis) => self.insert_thesis(thesis.clone())?,
-                        Command::RemoveThesis(thesis_id) => self.remove_thesis(thesis_id)?,
-                        Command::AddTags(thesis_id, tags) => {
-                            for tag in tags {
-                                self.tag_thesis(thesis_id, tag.clone())?;
-                            }
-                        }
-                        Command::RemoveTags(thesis_id, tags) => {
-                            for tag in tags {
-                                self.untag_thesis(thesis_id, tag)?;
-                            }
-                        }
-                        Command::SetAlias(thesis_id, new_alias) => {
-                            self.set_alias(thesis_id.clone(), new_alias.clone())?;
-                        }
-                    };
-                    Ok(self)
                 }
             }
 
@@ -753,17 +739,16 @@ macro_rules! define_sweater {
                     supported_relations_kinds: &BTreeSet<RelationKind>,
                 ) -> Result<Self>
                 where Self: Sized;
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>
+                where Self: Sized;
             }
 
-            struct AddTextThesisWithAlias {
-                text: Text,
-                alias: Alias
-            }
+            struct AddTextThesisWithAlias(pub Thesis);
 
             impl Command for AddTextThesisWithAlias {
                 fn validated(self) -> Result<Self> {
-                    self.text.validated()?;
-                    self.alias.validated()?;
+                    self.0.validated()?;
                     Ok(self)
                 }
 
@@ -782,23 +767,29 @@ macro_rules! define_sweater {
                     if let Some(captures) = regex.captures(line) {
                         let alias_capture = &captures[1];
                         let thesis_text_capture = &captures[2];
-                        Ok(Self {
-                            text: Text::new(&thesis_text_capture, aliases_resolver)?,
-                            alias: Alias(alias_capture.to_string()).validated()?.to_owned()
-                        }.validated()?)
+                        let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
+                        let result = Self(Thesis {
+                            alias: Some(alias.clone()),
+                            content: Content::Text(Text::new(&thesis_text_capture, aliases_resolver)?),
+                            tags: vec![]
+                        }).validated()?;
+                        aliases_resolver.remember(alias, result.0.id()?);
+                        Ok(result)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis with alias command"))
                     }
                 }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.insert_thesis(self.0.clone())
+                }
             }
 
-            struct AddTextThesisWithoutAlias {
-                text: Text
-            }
+            struct AddTextThesisWithoutAlias(pub Thesis);
 
             impl Command for AddTextThesisWithoutAlias {
                 fn validated(self) -> Result<Self> {
-                    self.text.validated()?;
+                    self.0.validated()?;
                     Ok(self)
                 }
 
@@ -816,23 +807,26 @@ macro_rules! define_sweater {
                     });
                     if let Some(captures) = regex.captures(line) {
                         let thesis_text_capture = &captures[1];
-                        let thesis_text = Text::new(thesis_text_capture, aliases_resolver)?;
-                        Ok(Self { text: thesis_text }.validated()?)
+                        Ok(Self(Thesis {
+                            alias: None,
+                            content: Content::Text(Text::new(thesis_text_capture, aliases_resolver)?),
+                            tags: vec![]
+                        }).validated()?)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis without alias command"))
                     }
                 }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.insert_thesis(self.0.clone())
+                }
             }
 
-            struct AddRelationThesisWithAlias {
-                relation: Relation,
-                alias: Alias
-            }
+            struct AddRelationThesisWithAlias(pub Thesis);
 
             impl Command for AddRelationThesisWithAlias {
                 fn validated(self) -> Result<Self> {
-                    self.relation.validated()?;
-                    self.alias.validated()?;
+                    self.0.validated()?;
                     Ok(self)
                 }
 
@@ -857,27 +851,33 @@ macro_rules! define_sweater {
                         if !supported_relations_kinds.contains(&relation_kind) {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        Ok(Self {
-                            relation: Relation {
+                        let alias = Alias(alias_capture).validated()?.to_owned();
+                        let result = Self(Thesis {
+                            alias: Some(alias.clone()),
+                            content: Content::Relation(Relation {
                                 from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
                                 kind: relation_kind,
                                 to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
-                            },
-                            alias: Alias(alias_capture).validated()?.to_owned()
-                        }.validated()?)
+                            }),
+                            tags: vec![]
+                        }).validated()?;
+                        aliases_resolver.remember(alias, result.0.id()?);
+                        Ok(result)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis with alias command"))
                     }
                 }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.insert_thesis(self.0.clone())
+                }
             }
 
-            struct AddRelationThesisWithoutAlias {
-                relation: Relation
-            }
+            struct AddRelationThesisWithoutAlias(pub Thesis);
 
             impl Command for AddRelationThesisWithoutAlias {
                 fn validated(self) -> Result<Self> {
-                    self.relation.validated()?;
+                    self.0.validated()?;
                     Ok(self)
                 }
 
@@ -901,18 +901,22 @@ macro_rules! define_sweater {
                         if !supported_relations_kinds.contains(&relation_kind) {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        Ok(Command::AddThesis(Thesis {
+                        Ok(Self( Thesis {
                             alias: None,
                             content: Content::Relation(Relation {
                                 from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
                                 kind: relation_kind,
                                 to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
                             }),
-                            tags: vec![],
-                        }).validated()?.to_owned())
+                            tags: vec![]
+                        }).validated()?)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis without alias command"))
                     }
+                }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.insert_thesis(self.0.clone())
                 }
             }
 
@@ -949,6 +953,10 @@ macro_rules! define_sweater {
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as set alias command"))
                     }
+                }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.set_alias(self.thesis_id.clone(), self.alias.clone())
                 }
             }
 
@@ -991,6 +999,10 @@ macro_rules! define_sweater {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
                     }
                 }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.add_tags(&self.thesis_id, self.tags.clone())
+                }
             }
 
             struct RemoveTags {
@@ -1032,9 +1044,13 @@ macro_rules! define_sweater {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
                     }
                 }
+
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    transaction.remove_tags(&self.thesis_id, &self.tags)
+                }
             }
 
-            pub fn parse_command(
+            pub fn parse_command<'a>(
                 line: &str,
                 aliases_resolver: &'a mut AliasesResolver<'a>,
                 supported_relations_kinds: &BTreeSet<RelationKind>
@@ -1460,7 +1476,7 @@ mod tests {
                                 result
                             };
                             println!("tag {:?} with {:?}", thesis_to_tag_id, tag_to_add);
-                            transaction.tag_thesis(&thesis_to_tag_id, tag_to_add.clone())?;
+                            transaction.add_tags(&thesis_to_tag_id, tag_to_add.clone())?;
                             assert!(transaction
                                 .get_thesis(&thesis_to_tag_id)?
                                 .unwrap()
@@ -1492,7 +1508,7 @@ mod tests {
                                 let tag_to_remove =
                                     thesis_to_untag.tags[tag_to_remove_index].clone();
                                 println!("untag {:?} with {:?}", thesis_to_untag_id, tag_to_remove);
-                                transaction.untag_thesis(&thesis_to_untag_id, &tag_to_remove)?;
+                                transaction.remove_tags(&thesis_to_untag_id, &tag_to_remove)?;
                                 assert!(!transaction
                                     .get_thesis(&thesis_to_untag_id)?
                                     .unwrap()
