@@ -11,7 +11,6 @@ serde_json = { version = "1.0.145", features = ["std", "unbounded_depth"] }
 fallible-iterator = { version = "0.3", features = ["std"] }
 regex = "1.12.2"
 html-escape = "0.2"
-typetag = "0.2.21"
 
 [dev-dependencies]
 nanorand = "0.8"

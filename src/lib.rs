@@ -4,7 +4,6 @@ pub extern crate html_escape;
 pub extern crate regex;
 pub extern crate serde;
 pub extern crate trove;
-pub extern crate typetag;
 
 pub use trove::bincode;
 pub use trove::xxhash_rust;
@@ -30,7 +29,6 @@ macro_rules! define_sweater {
                     trove::Document,
                     anyhow::{anyhow, Context, Result, Error},
                     regex::Regex,
-                    typetag
                 },
             };
 
@@ -731,114 +729,63 @@ macro_rules! define_sweater {
                 }
             }
 
-            #[typetag::serde]
-            pub trait Command: std::fmt::Debug {
-                fn validated(self) -> Result<Self>
-                where Self: Sized;
-
-                fn parse<'a, 'b>(
-                    line: &str,
-                    aliases_resolver: &'b mut AliasesResolver<'a>,
-                    supported_relations_kinds: &BTreeSet<RelationKind>,
-                ) -> Result<Self>
-                where Self: Sized;
-
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>;
+            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+            pub enum Command {
+                AddTextThesisWithAlias(Thesis),
+                AddTextThesisWithoutAlias(Thesis),
+                AddRelationThesisWithAlias(Thesis),
+                AddRelationThesisWithoutAlias(Thesis),
+                SetAlias { thesis_id: DocumentId, alias: Alias },
+                AddTags { thesis_id: DocumentId, tags: Vec<Tag> },
+                RemoveTags { thesis_id: DocumentId, tags: Vec<Tag> }
             }
 
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct AddTextThesisWithAlias(pub Thesis);
-
-            #[typetag::serde]
-            impl Command for AddTextThesisWithAlias {
-                fn validated(self) -> Result<Self> {
-                    self.0.validated()?;
+            impl Command {
+                pub fn validated(self) -> Result<Self> {
+                    match self {
+                        Command::AddTextThesisWithAlias(ref thesis) => { thesis.validated()?; }
+                        Command::AddTextThesisWithoutAlias(ref thesis) => { thesis.validated()?; }
+                        Command::AddRelationThesisWithAlias(ref thesis) => { thesis.validated()?; }
+                        Command::AddRelationThesisWithoutAlias(ref thesis) => { thesis.validated()?; }
+                        Command::SetAlias { ref alias, .. } => { alias.validated()?; }
+                        Command::AddTags { ref tags, .. } => {
+                            for tag in tags.iter() {
+                                tag.validated()?;
+                            }
+                        }
+                        Command::RemoveTags { ref tags, .. } => {
+                            for tag in tags.iter() {
+                                tag.validated()?;
+                            }
+                        }
+                    }
                     Ok(self)
                 }
 
-                fn parse<'a, 'b>(
+                fn parse_as_set_alias<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
-                    _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
-                        Regex::new(r#"^/may +(\S+) +alias +(.+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add text thesis with alias command regex")
-                            .unwrap()
+                        Regex::new(r#"^/may +(\S+) +alias +(\S+)$"#)
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let alias_capture = &captures[1];
-                        let thesis_text_capture = &captures[2];
+                        let reference_capture = &captures[2];
                         let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
-                        let result = Self(Thesis {
-                            alias: Some(alias.clone()),
-                            content: Content::Text(Text::new(&thesis_text_capture, aliases_resolver)?),
-                            tags: vec![]
-                        }).validated()?;
-                        aliases_resolver.remember(alias, result.0.id()?);
+                        let thesis_id = aliases_resolver.get_thesis_id_by_reference(&Reference::new(&reference_capture)?)?;
+                        let result = Self::SetAlias { thesis_id: thesis_id.clone(), alias: alias.clone() }.validated()?;
+                        aliases_resolver.remember(alias, thesis_id);
                         Ok(result)
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis with alias command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.insert_thesis(self.0.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct AddTextThesisWithoutAlias(pub Thesis);
-
-            #[typetag::serde]
-            impl Command for AddTextThesisWithoutAlias {
-                fn validated(self) -> Result<Self> {
-                    self.0.validated()?;
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
-                    line: &str,
-                    aliases_resolver: &'b mut AliasesResolver<'a>,
-                    _supported_relations_kinds: &BTreeSet<RelationKind>
-                ) -> Result<Self> {
-                    static REGEX: std::sync::OnceLock<Regex> =
-                        std::sync::OnceLock::new();
-                    let regex = REGEX.get_or_init(|| {
-                        Regex::new(r#"^/may +(.+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add text thesis without alias command regex")
-                            .unwrap()
-                    });
-                    if let Some(captures) = regex.captures(line) {
-                        let thesis_text_capture = &captures[1];
-                        Self(Thesis {
-                            alias: None,
-                            content: Content::Text(Text::new(thesis_text_capture, aliases_resolver)?),
-                            tags: vec![]
-                        }).validated()
-                    } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis without alias command"))
-                    }
-                }
-
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.insert_thesis(self.0.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct AddRelationThesisWithAlias(pub Thesis);
-
-            #[typetag::serde]
-            impl Command for AddRelationThesisWithAlias {
-                fn validated(self) -> Result<Self> {
-                    self.0.validated()?;
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
+                fn parse_as_add_relation_thesis_with_alias<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
                     supported_relations_kinds: &BTreeSet<RelationKind>
@@ -847,8 +794,7 @@ macro_rules! define_sweater {
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
                         Regex::new(r#"^/may +(\S+) alias +(\S+) +(.+) +(\S+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add relation thesis with alias command regex")
-                            .unwrap()
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let alias_capture = &captures[1];
@@ -860,7 +806,7 @@ macro_rules! define_sweater {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
                         let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
-                        let result = Self(Thesis {
+                        let thesis = Thesis {
                             alias: Some(alias.clone()),
                             content: Content::Relation(Relation {
                                 from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
@@ -868,30 +814,17 @@ macro_rules! define_sweater {
                                 to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
                             }),
                             tags: vec![]
-                        }).validated()?;
-                        aliases_resolver.remember(alias, result.0.id()?);
+                        };
+                        let id = thesis.id()?;
+                        let result = Self::AddRelationThesisWithAlias(thesis).validated()?;
+                        aliases_resolver.remember(alias, id);
                         Ok(result)
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis with alias command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.insert_thesis(self.0.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct AddRelationThesisWithoutAlias(pub Thesis);
-
-            #[typetag::serde]
-            impl Command for AddRelationThesisWithoutAlias {
-                fn validated(self) -> Result<Self> {
-                    self.0.validated()?;
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
+                fn parse_as_add_relation_thesis_without_alias<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
                     supported_relations_kinds: &BTreeSet<RelationKind>
@@ -900,8 +833,7 @@ macro_rules! define_sweater {
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
                         Regex::new(r#"^/may +(\S+) +(.+) +(\S+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add relation thesis without alias command regex")
-                            .unwrap()
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let from_reference_capture = &captures[1];
@@ -912,7 +844,7 @@ macro_rules! define_sweater {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
                         let to = aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?;
-                        let result = Self( Thesis {
+                        let result = Self::AddRelationThesisWithoutAlias( Thesis {
                             alias: None,
                             content: Content::Relation(Relation {
                                 from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
@@ -923,90 +855,72 @@ macro_rules! define_sweater {
                         }).validated()?;
                         Ok(result)
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis without alias command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.insert_thesis(self.0.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct SetAlias {
-                thesis_id: DocumentId,
-                alias: Alias
-            }
-
-            #[typetag::serde]
-            impl Command for SetAlias {
-                fn validated(self) -> Result<Self> {
-                    self.alias.validated()?;
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
+                fn parse_as_add_text_thesis_with_alias<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
-                    _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
-                        Regex::new(r#"^/may +(\S+) +alias +(\S+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing set alias command regex")
-                            .unwrap()
+                        Regex::new(r#"^/may +(\S+) +alias +(.+)$"#)
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let alias_capture = &captures[1];
-                        let reference_capture = &captures[2];
-                        let result = Self {
-                            thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(&reference_capture)?)?,
-                            alias: Alias(alias_capture.to_string()).validated()?.to_owned()
-                        }.validated()?;
-                        aliases_resolver.remember(result.alias.clone(), result.thesis_id.clone());
-                        Ok(result)
+                        let thesis_text_capture = &captures[2];
+                        let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
+                        let thesis = Thesis {
+                            alias: Some(alias.clone()),
+                            content: Content::Text(Text::new(&thesis_text_capture, aliases_resolver)?),
+                            tags: vec![]
+                        };
+                        aliases_resolver.remember(alias, thesis.id()?);
+                        Self::AddTextThesisWithAlias(thesis).validated()
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as set alias command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.set_alias(self.thesis_id.clone(), self.alias.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct AddTags {
-                thesis_id: DocumentId,
-                tags: Vec<Tag>
-            }
-
-            #[typetag::serde]
-            impl Command for AddTags {
-                fn validated(self) -> Result<Self> {
-                    for tag in self.tags.iter() {
-                        tag.validated()?;
-                    }
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
+                fn parse_as_add_text_thesis_without_alias<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
-                    _supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    static REGEX: std::sync::OnceLock<Regex> =
+                        std::sync::OnceLock::new();
+                    let regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^/may +(.+)$"#)
+                            .with_context(|| "Can not compile regular expression").unwrap()
+                    });
+                    if let Some(captures) = regex.captures(line) {
+                        let thesis_text_capture = &captures[1];
+                        Self::AddTextThesisWithoutAlias(Thesis {
+                            alias: None,
+                            content: Content::Text(Text::new(thesis_text_capture, aliases_resolver)?),
+                            tags: vec![]
+                        }).validated()
+                    } else {
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
+                    }
+                }
+
+                fn parse_as_add_tags<'a, 'b>(
+                    line: &str,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
                         Regex::new(r#"^/may +(\S+(?: +\S+)*) +tag +(\S+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add tag command regex")
-                            .unwrap()
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let tags_capture = &captures[1];
                         let reference_capture = &captures[2];
-                        Ok(Self {
+                        Ok(Self::AddTags {
                             thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(reference_capture)?)?,
                             tags: tags_capture
                                 .split(' ')
@@ -1014,46 +928,24 @@ macro_rules! define_sweater {
                                 .collect(),
                         }.validated()?)
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.add_tags(&self.thesis_id, self.tags.clone())
-                }
-            }
-
-            #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-            struct RemoveTags {
-                thesis_id: DocumentId,
-                tags: Vec<Tag>
-            }
-
-            #[typetag::serde]
-            impl Command for RemoveTags {
-                fn validated(self) -> Result<Self> {
-                    for tag in self.tags.iter() {
-                        tag.validated()?;
-                    }
-                    Ok(self)
-                }
-
-                fn parse<'a, 'b>(
+                fn parse_as_remove_tags<'a, 'b>(
                     line: &str,
                     aliases_resolver: &'b mut AliasesResolver<'a>,
-                    _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
                         Regex::new(r#"^/may +(\S+(?: +\S+)*) +not tag +(\S+)$"#)
-                            .with_context(|| "Can not compile regular expression for parsing add untag command regex")
-                            .unwrap()
+                            .with_context(|| "Can not compile regular expression").unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
                         let tags_capture = &captures[1];
                         let reference_capture = &captures[2];
-                        Ok(Self {
+                        Ok(Self::RemoveTags {
                             thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(reference_capture)?)?,
                             tags: tags_capture
                                 .split(' ')
@@ -1061,51 +953,59 @@ macro_rules! define_sweater {
                                 .collect(),
                         }.validated()?)
                     } else {
-                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add tag command"))
+                        Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?}"))
                     }
                 }
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
-                    transaction.remove_tags(&self.thesis_id, &self.tags)
+                pub fn parse<'a, 'b>(
+                    line: &str,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
+                    supported_relations_kinds: &BTreeSet<RelationKind>
+                ) -> Result<Self> {
+                    let mut errors = vec![];
+                    match Self::parse_as_set_alias(line, aliases_resolver) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("set alias", error)); }
+                    }
+                    match Self::parse_as_add_relation_thesis_with_alias(line, aliases_resolver, supported_relations_kinds) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("add relation thesis with alias", error)); }
+                    }
+                    match Self::parse_as_add_relation_thesis_without_alias(line, aliases_resolver, supported_relations_kinds) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("add relation thesis without alias", error)); }
+                    }
+                    match Self::parse_as_add_text_thesis_with_alias(line, aliases_resolver) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("add text thesis with alias", error)); }
+                    }
+                    match Self::parse_as_add_text_thesis_without_alias(line, aliases_resolver) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("add text thesis without alias", error)); }
+                    }
+                    match Self::parse_as_add_tags(line, aliases_resolver) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("add tags", error)); }
+                    }
+                    match Self::parse_as_remove_tags(line, aliases_resolver) {
+                        Ok(result) => { return Ok(result); }
+                        Err(error) => { errors.push(("remove tags", error)); }
+                    }
+                    Err(anyhow!("Can not parse command line {line:?}:\ncan not be parsed as {}",
+                        errors.into_iter().map(|(command_name, result)| format!("{command_name} because {}", result.to_string())).collect::<Vec<_>>().join("\nand can not be parsed as ")))
                 }
-            }
 
-            pub fn parse_command<'a, 'b>(
-                line: &str,
-                aliases_resolver: &'b mut AliasesResolver<'a>,
-                supported_relations_kinds: &BTreeSet<RelationKind>
-            ) -> Result<Box<dyn Command>> {
-                let mut errors = vec![];
-                match SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("SetAlias", error))
-                };
-                match AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("AddRelationThesisWithAlias", error))
-                };
-                match AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("AddRelationThesisWithoutAlias", error))
-                };
-                match AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("AddTextThesisWithAlias", error))
-                };
-                match AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("AddTextThesisWithoutAlias", error))
-                };
-                match AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("AddTags", error))
-                };
-                match RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
-                    Ok(result) => return Ok(result),
-                    Err(error) => errors.push(("RemoveTags", error))
-                };
-                Err(anyhow!("Can not parse command line {line:?}:\ncan not be parsed as {}",
-                    errors.into_iter().map(|(command_name, result)| format!("{command_name} because {}", result.to_string())).collect::<Vec<_>>().join("\nand can not be parsed as ")))
+                pub fn execute(&self, transaction: &mut WriteTransaction) -> Result<()> {
+                    match self {
+                        Command::AddTextThesisWithAlias(thesis) => { transaction.insert_thesis(thesis.clone()) }
+                        Command::AddTextThesisWithoutAlias(thesis) => { transaction.insert_thesis(thesis.clone()) }
+                        Command::AddRelationThesisWithAlias(thesis) => { transaction.insert_thesis(thesis.clone()) }
+                        Command::AddRelationThesisWithoutAlias(thesis) => { transaction.insert_thesis(thesis.clone()) }
+                        Command::SetAlias { thesis_id, alias } => { transaction.set_alias(thesis_id.clone(), alias.clone()) }
+                        Command::AddTags { thesis_id, tags } => { transaction.add_tags(thesis_id, tags.clone()) }
+                        Command::RemoveTags { thesis_id, tags } => { transaction.remove_tags(thesis_id, &tags) }
+                    }
+                }
             }
 
             #[derive(PartialEq, Eq, Serialize, Deserialize)]
@@ -1125,8 +1025,6 @@ macro_rules! define_sweater {
             #[derive(Serialize, Deserialize)]
             pub struct GraphGeneratorConfig {
                 pub wrap_width: u16,
-                pub externalize_relations_nodes: ExternalizeRelationsNodes,
-                pub show_nodes_references: ShowNodesReferences,
             }
 
             pub enum Stage {
@@ -1586,7 +1484,7 @@ mod tests {
                 };
                 let mut commands = vec![];
                 for line in std::fs::read_to_string("src/example.txt")?.lines() {
-                    commands.push(parse_command(
+                    commands.push(Command::parse(
                         line,
                         &mut aliases_resolver,
                         &transaction.sweater_config.supported_relations_kinds,
@@ -1599,16 +1497,9 @@ mod tests {
 
                 std::fs::write(
                     "/tmp/wool_example_graph.dot",
-                    GraphGenerator::new(
-                        &GraphGeneratorConfig {
-                            wrap_width: 64,
-                            externalize_relations_nodes: ExternalizeRelationsNodes::None,
-                            show_nodes_references: ShowNodesReferences::All,
-                        },
-                        transaction,
-                    )?
-                    .collect::<Vec<_>>()?
-                    .join(""),
+                    GraphGenerator::new(&GraphGeneratorConfig { wrap_width: 64 }, transaction)?
+                        .collect::<Vec<_>>()?
+                        .join(""),
                 )?;
 
                 Ok(())
