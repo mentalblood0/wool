@@ -57,7 +57,7 @@ An English words sequence without punctuation, e.g. `may be`, `therefore`
 
 ## Commands
 
-If there is more then one command to parse, they must be delimited with two or more line breaks, e.g. see [`src/example.txt`](src/example.txt)
+One commands occupies one line. See example [`here`](src/example.txt)
 
 `/may Релятивизм опасен` - add **thesis** with **text** `Релятивизм опасен`
 
