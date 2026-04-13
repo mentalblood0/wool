@@ -729,21 +729,21 @@ macro_rules! define_sweater {
                 }
             }
 
-            pub trait Command {
+            pub trait Command: std::fmt::Debug {
                 fn validated(self) -> Result<Self>
                 where Self: Sized;
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     supported_relations_kinds: &BTreeSet<RelationKind>,
                 ) -> Result<Self>
                 where Self: Sized;
 
-                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>
-                where Self: Sized;
+                fn execute(&self, transaction: &mut WriteTransaction) -> Result<()>;
             }
 
+            #[derive(Debug)]
             struct AddTextThesisWithAlias(pub Thesis);
 
             impl Command for AddTextThesisWithAlias {
@@ -752,9 +752,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -785,6 +785,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct AddTextThesisWithoutAlias(pub Thesis);
 
             impl Command for AddTextThesisWithoutAlias {
@@ -793,9 +794,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -822,6 +823,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct AddRelationThesisWithAlias(pub Thesis);
 
             impl Command for AddRelationThesisWithAlias {
@@ -830,9 +832,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -873,6 +875,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct AddRelationThesisWithoutAlias(pub Thesis);
 
             impl Command for AddRelationThesisWithoutAlias {
@@ -881,9 +884,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -920,6 +923,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct SetAlias {
                 thesis_id: DocumentId,
                 alias: Alias
@@ -931,9 +935,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -960,6 +964,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct AddTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
@@ -973,9 +978,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -1005,6 +1010,7 @@ macro_rules! define_sweater {
                 }
             }
 
+            #[derive(Debug)]
             struct RemoveTags {
                 thesis_id: DocumentId,
                 tags: Vec<Tag>
@@ -1018,9 +1024,9 @@ macro_rules! define_sweater {
                     Ok(self)
                 }
 
-                fn parse<'a>(
+                fn parse<'a, 'b>(
                     line: &str,
-                    aliases_resolver: &'a mut AliasesResolver<'a>,
+                    aliases_resolver: &'b mut AliasesResolver<'a>,
                     _supported_relations_kinds: &BTreeSet<RelationKind>
                 ) -> Result<Self> {
                     static REGEX: std::sync::OnceLock<Regex> =
@@ -1050,9 +1056,9 @@ macro_rules! define_sweater {
                 }
             }
 
-            pub fn parse_command<'a>(
+            pub fn parse_command<'a, 'b>(
                 line: &str,
-                aliases_resolver: &'a mut AliasesResolver<'a>,
+                aliases_resolver: &'b mut AliasesResolver<'a>,
                 supported_relations_kinds: &BTreeSet<RelationKind>
             ) -> Result<Box<dyn Command>> {
                 let results = [
@@ -1066,7 +1072,7 @@ macro_rules! define_sweater {
                 ];
                 let successfull_results = results.into_iter().filter(|result| result.is_ok()).map(|result| result.unwrap()).collect::<Vec<_>>();
                 if successfull_results.len() > 1 {
-                    Err(anyhow!("Ambiguous command line {line:?}"))
+                    Err(anyhow!("Ambiguous command line {line:?}: can be parsed as {}", successfull_results.iter().map(|result| format!("{result:?}")).collect::<Vec<_>>().join(" or as ")))
                 } else {
                     successfull_results.into_iter().next().ok_or_else(|| anyhow!("Can not parse command line {line:?}"))
                 }
@@ -1476,7 +1482,7 @@ mod tests {
                                 result
                             };
                             println!("tag {:?} with {:?}", thesis_to_tag_id, tag_to_add);
-                            transaction.add_tags(&thesis_to_tag_id, tag_to_add.clone())?;
+                            transaction.add_tags(&thesis_to_tag_id, [tag_to_add.clone()].into())?;
                             assert!(transaction
                                 .get_thesis(&thesis_to_tag_id)?
                                 .unwrap()
@@ -1508,7 +1514,10 @@ mod tests {
                                 let tag_to_remove =
                                     thesis_to_untag.tags[tag_to_remove_index].clone();
                                 println!("untag {:?} with {:?}", thesis_to_untag_id, tag_to_remove);
-                                transaction.remove_tags(&thesis_to_untag_id, &tag_to_remove)?;
+                                transaction.remove_tags(
+                                    &thesis_to_untag_id,
+                                    &[tag_to_remove.clone()].into(),
+                                )?;
                                 assert!(!transaction
                                     .get_thesis(&thesis_to_untag_id)?
                                     .unwrap()
@@ -1536,40 +1545,43 @@ mod tests {
             .unwrap();
     }
 
-    // #[test]
-    // fn test_example() {
-    //     let mut sweater = new_default_sweater("test_example");
-    //     sweater
-    //         .lock_all_and_write(|transaction| {
-    //             let commands = CommandsIterator::new(
-    //                 &std::fs::read_to_string("src/example.txt")?,
-    //                 &transaction.sweater_config.supported_relations_kinds,
-    //                 &mut AliasesResolver {
-    //                     read_able_transaction: transaction,
-    //                     known_aliases: BTreeMap::new(),
-    //                 },
-    //             )
-    //             .collect::<Vec<_>>()?;
-    //             for command in commands {
-    //                 transaction.execute_command(&command)?;
-    //             }
+    #[test]
+    fn test_example() {
+        let mut sweater = new_default_sweater("test_example");
+        sweater
+            .lock_all_and_write(|transaction| {
+                let mut aliases_resolver = AliasesResolver {
+                    read_able_transaction: transaction,
+                    known_aliases: BTreeMap::new(),
+                };
+                let mut commands = vec![];
+                for line in std::fs::read_to_string("src/example.txt")?.lines() {
+                    commands.push(parse_command(
+                        line,
+                        &mut aliases_resolver,
+                        &transaction.sweater_config.supported_relations_kinds,
+                    )?);
+                }
+                for command in commands {
+                    command.execute(transaction)?;
+                }
 
-    //             std::fs::write(
-    //                 "/tmp/wool_example_graph.dot",
-    //                 GraphGenerator::new(
-    //                     &GraphGeneratorConfig {
-    //                         wrap_width: 64,
-    //                         externalize_relations_nodes: ExternalizeRelationsNodes::None,
-    //                         show_nodes_references: ShowNodesReferences::All,
-    //                     },
-    //                     transaction,
-    //                 )?
-    //                 .collect::<Vec<_>>()?
-    //                 .join(""),
-    //             )?;
+                std::fs::write(
+                    "/tmp/wool_example_graph.dot",
+                    GraphGenerator::new(
+                        &GraphGeneratorConfig {
+                            wrap_width: 64,
+                            externalize_relations_nodes: ExternalizeRelationsNodes::None,
+                            show_nodes_references: ShowNodesReferences::All,
+                        },
+                        transaction,
+                    )?
+                    .collect::<Vec<_>>()?
+                    .join(""),
+                )?;
 
-    //             Ok(())
-    //         })
-    //         .unwrap();
-    // }
+                Ok(())
+            })
+            .unwrap();
+    }
 }

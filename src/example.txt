@@ -1,4 +1,4 @@
-/may R alias Релятивизм
+/may R alias Общий релятивизм
 /may R-r alias Полный релятивизм
 /may R may be R-r
 /may R-a alias Относительно все кроме этой относительности
