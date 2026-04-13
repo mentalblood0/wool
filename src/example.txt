@@ -56,11 +56,11 @@
 /may ((A1.1.2)/(R-r)).3.2 alias A0/(R-r) negates A_includes_R
 /may ((A1.1.2)/(R-r)).4.1 alias С точки зрения абсолютиста, релятивист отрицает абсолютизм
 /may ((A1.1.2)/(R-r)).3.2 therefore ((A1.1.2)/(R-r)).4.1
-/may ((A1.1.2)/(R-r)).4.2 С точки зрения релятивиста, абсолютист не отрицает релятивизм
-/may A0/(R-r)_negates_A0 alias therefore ((A1.1.2)/(R-r)).4.2
+/may ((A1.1.2)/(R-r)).4.2 alias С точки зрения релятивиста, абсолютист не отрицает релятивизм
+/may A0/(R-r)_negates_A0 therefore ((A1.1.2)/(R-r)).4.2
 /may ((A1.1.2)/(R-r)).5 alias Нечто, принимаемое всеми
 /may ((A1.1.2)/(R-r)).5_therefore_R alias ((A1.1.2)/(R-r)).5 therefore R
-/may ((A1.1.2)/(R-r)).5_therefore_R alias therefore ((A1.1.2)/(R-r)).4.2
+/may ((A1.1.2)/(R-r)).5_therefore_R therefore ((A1.1.2)/(R-r)).4.2
 /may B alias Относительно твоей перспективы истинно то и только то, во что ты веришь
 /may P alias Для всякого утверждения есть перспектива, в которой оно истинно
 /may R_includes_B alias R includes B
@@ -71,7 +71,7 @@
 /may A3_answers_(R-r).0 alias A3 answers (R-r).0
 /may A3->1 alias Перспектив бесконечно много
 /may A3 therefore A3->1
-/may A3.1 Если перспективы привязаны к людям, а людей конечное число, то перспектив конечное число
+/may A3.1 alias Если перспективы привязаны к людям, а людей конечное число, то перспектив конечное число
 /may A3.1_negates_A3->1 alias A3.1 negates A3->1
 /may A3.1_negates_A3->1 therefore A3_answers_(R-r).0
 /may R_inexpressible alias Релятивизм невыразим

@@ -259,7 +259,7 @@ macro_rules! define_sweater {
                                     self.sweater_config.supported_relations_kinds
                                 ));
                             }
-                            for related_id in [from_id, to_id] {
+                            for (name, related_id) in [("from", from_id), ("to", to_id)] {
                                 if self
                                     .chest_transaction
                                     .theses_get(&related_id, &path_segments!("content"))?
@@ -267,7 +267,7 @@ macro_rules! define_sweater {
                                 {
                                     return Err(anyhow!(
                                         "Can not insert relation {thesis:?} in sweater without inserted \
-                                         thesis with {related_id:?}"
+                                         {name:?} thesis with {related_id:?}"
                                     ));
                                 }
                             }
@@ -853,7 +853,7 @@ macro_rules! define_sweater {
                         if !supported_relations_kinds.contains(&relation_kind) {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        let alias = Alias(alias_capture).validated()?.to_owned();
+                        let alias = Alias(alias_capture);
                         let result = Self(Thesis {
                             alias: Some(alias.clone()),
                             content: Content::Relation(Relation {
@@ -950,10 +950,12 @@ macro_rules! define_sweater {
                     if let Some(captures) = regex.captures(line) {
                         let alias_capture = &captures[1];
                         let reference_capture = &captures[2];
-                        Ok(Self {
+                        let result = Self {
                             thesis_id: aliases_resolver.get_thesis_id_by_reference(&Reference::new(&reference_capture)?)?,
                             alias: Alias(alias_capture.to_string()).validated()?.to_owned()
-                        }.validated()?)
+                        }.validated()?;
+                        aliases_resolver.remember(result.alias.clone(), result.thesis_id.clone());
+                        Ok(result)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as set alias command"))
                     }
@@ -986,7 +988,7 @@ macro_rules! define_sweater {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
-                        Regex::new(r#"^/may +(\S+(:? +\S+)+) +tag +(\S+)$"#)
+                        Regex::new(r#"^/may +(\S+(?: +\S+)*) +tag +(\S+)$"#)
                             .with_context(|| "Can not compile regular expression for parsing add tag command regex")
                             .unwrap()
                     });
@@ -1032,7 +1034,7 @@ macro_rules! define_sweater {
                     static REGEX: std::sync::OnceLock<Regex> =
                         std::sync::OnceLock::new();
                     let regex = REGEX.get_or_init(|| {
-                        Regex::new(r#"^/may +(\S+(:? +\S+)+) +not tag +(\S+)$"#)
+                        Regex::new(r#"^/may +(\S+(?: +\S+)*) +not tag +(\S+)$"#)
                             .with_context(|| "Can not compile regular expression for parsing add untag command regex")
                             .unwrap()
                     });
@@ -1062,19 +1064,24 @@ macro_rules! define_sweater {
                 supported_relations_kinds: &BTreeSet<RelationKind>
             ) -> Result<Box<dyn Command>> {
                 let results = [
-                    AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
-                    RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>),
+                    ("SetAlias", SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("AddRelationThesisWithAlias", AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("AddRelationThesisWithoutAlias", AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("AddTextThesisWithAlias", AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("AddTextThesisWithoutAlias", AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("AddTags", AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
+                    ("RemoveTags", RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
                 ];
-                let successfull_results = results.into_iter().filter(|result| result.is_ok()).map(|result| result.unwrap()).collect::<Vec<_>>();
-                if successfull_results.len() > 1 {
-                    Err(anyhow!("Ambiguous command line {line:?}: can be parsed as {}", successfull_results.iter().map(|result| format!("{result:?}")).collect::<Vec<_>>().join(" or as ")))
+                if results.iter().all(|(_, result)| result.is_err()) {
+                    Err(anyhow!("Can not parse command line {line:?}:\ncan not be parsed as {}",
+                        results.into_iter().map(|(command_name, result)| format!("{command_name} because {}", result.err().unwrap().to_string())).collect::<Vec<_>>().join("\nand can not be parsed as ")))
                 } else {
-                    successfull_results.into_iter().next().ok_or_else(|| anyhow!("Can not parse command line {line:?}"))
+                Ok(results.into_iter().filter(|(_, result)| result.is_ok()).map(|(_, result)| result.unwrap()).next().unwrap())
+                // if successfull_results.len() > 1 {
+                //     Err(anyhow!("Ambiguous command line {line:?}: can be parsed as {}", successfull_results.iter().map(|result| format!("{result:?}")).collect::<Vec<_>>().join(" or as ")))
+                // } else {
+                //     successfull_results.into_iter().next().ok_or_else(|| anyhow!("Can not parse command line {line:?}"))
+                // }
                 }
             }
 
@@ -1563,6 +1570,7 @@ mod tests {
                     )?);
                 }
                 for command in commands {
+                    println!("{command:?}");
                     command.execute(transaction)?;
                 }
 
