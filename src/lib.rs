@@ -808,11 +808,11 @@ macro_rules! define_sweater {
                     });
                     if let Some(captures) = regex.captures(line) {
                         let thesis_text_capture = &captures[1];
-                        Ok(Self(Thesis {
+                        Self(Thesis {
                             alias: None,
                             content: Content::Text(Text::new(thesis_text_capture, aliases_resolver)?),
                             tags: vec![]
-                        }).validated()?)
+                        }).validated()
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add text thesis without alias command"))
                     }
@@ -845,7 +845,7 @@ macro_rules! define_sweater {
                             .unwrap()
                     });
                     if let Some(captures) = regex.captures(line) {
-                        let alias_capture = captures[1].to_string();
+                        let alias_capture = &captures[1];
                         let from_reference_capture = &captures[2];
                         let relation_kind_capture = &captures[3];
                         let to_reference_capture = &captures[4];
@@ -853,7 +853,7 @@ macro_rules! define_sweater {
                         if !supported_relations_kinds.contains(&relation_kind) {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        let alias = Alias(alias_capture);
+                        let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
                         let result = Self(Thesis {
                             alias: Some(alias.clone()),
                             content: Content::Relation(Relation {
@@ -904,15 +904,17 @@ macro_rules! define_sweater {
                         if !supported_relations_kinds.contains(&relation_kind) {
                             return Err(anyhow!("Relation kind {relation_kind:?} is not supported"))
                         }
-                        Ok(Self( Thesis {
+                        let to = aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?;
+                        let result = Self( Thesis {
                             alias: None,
                             content: Content::Relation(Relation {
                                 from: aliases_resolver.get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
                                 kind: relation_kind,
-                                to: aliases_resolver.get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
+                                to: to.clone()
                             }),
                             tags: vec![]
-                        }).validated()?)
+                        }).validated()?;
+                        Ok(result)
                     } else {
                         Err(anyhow!("Can not match {line:?} with regular expression {REGEX:?} to parse as add relation thesis without alias command"))
                     }
@@ -1063,26 +1065,37 @@ macro_rules! define_sweater {
                 aliases_resolver: &'b mut AliasesResolver<'a>,
                 supported_relations_kinds: &BTreeSet<RelationKind>
             ) -> Result<Box<dyn Command>> {
-                let results = [
-                    ("SetAlias", SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("AddRelationThesisWithAlias", AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("AddRelationThesisWithoutAlias", AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("AddTextThesisWithAlias", AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("AddTextThesisWithoutAlias", AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("AddTags", AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                    ("RemoveTags", RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>)),
-                ];
-                if results.iter().all(|(_, result)| result.is_err()) {
-                    Err(anyhow!("Can not parse command line {line:?}:\ncan not be parsed as {}",
-                        results.into_iter().map(|(command_name, result)| format!("{command_name} because {}", result.err().unwrap().to_string())).collect::<Vec<_>>().join("\nand can not be parsed as ")))
-                } else {
-                Ok(results.into_iter().filter(|(_, result)| result.is_ok()).map(|(_, result)| result.unwrap()).next().unwrap())
-                // if successfull_results.len() > 1 {
-                //     Err(anyhow!("Ambiguous command line {line:?}: can be parsed as {}", successfull_results.iter().map(|result| format!("{result:?}")).collect::<Vec<_>>().join(" or as ")))
-                // } else {
-                //     successfull_results.into_iter().next().ok_or_else(|| anyhow!("Can not parse command line {line:?}"))
-                // }
-                }
+                let mut errors = vec![];
+                match SetAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("SetAlias", error))
+                };
+                match AddRelationThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("AddRelationThesisWithAlias", error))
+                };
+                match AddRelationThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("AddRelationThesisWithoutAlias", error))
+                };
+                match AddTextThesisWithAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("AddTextThesisWithAlias", error))
+                };
+                match AddTextThesisWithoutAlias::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("AddTextThesisWithoutAlias", error))
+                };
+                match AddTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("AddTags", error))
+                };
+                match RemoveTags::parse(line, aliases_resolver, supported_relations_kinds).map(|command| Box::new(command) as Box<dyn Command>) {
+                    Ok(result) => return Ok(result),
+                    Err(error) => errors.push(("RemoveTags", error))
+                };
+                Err(anyhow!("Can not parse command line {line:?}:\ncan not be parsed as {}",
+                    errors.into_iter().map(|(command_name, result)| format!("{command_name} because {}", result.to_string())).collect::<Vec<_>>().join("\nand can not be parsed as ")))
             }
 
             #[derive(PartialEq, Eq, Serialize, Deserialize)]
@@ -1570,7 +1583,6 @@ mod tests {
                     )?);
                 }
                 for command in commands {
-                    println!("{command:?}");
                     command.execute(transaction)?;
                 }
 
