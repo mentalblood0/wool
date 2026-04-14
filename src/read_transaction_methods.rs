@@ -6,6 +6,7 @@ use trove::DocumentId;
 
 use crate::alias::Alias;
 use crate::command::Command;
+use crate::relation::Relation;
 use crate::relation_kind::RelationKind;
 use crate::tag::Tag;
 use crate::text::Text;
@@ -23,7 +24,8 @@ pub trait ReadTransactionMethods<'a> {
     fn get_alias_by_thesis_id(&self, thesis_id: &DocumentId) -> Result<Option<Alias>>;
     fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>>;
     fn iter_theses(&self) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>>;
-    fn compose_with_aliases(&self, text: &Text) -> Result<String>;
+    fn compose_text_with_aliases(&self, text: &Text) -> Result<String>;
+    fn compose_relation_text_with_aliases(&self, relation: &Relation) -> Result<String>;
     fn supported_relations_kinds(&self) -> BTreeSet<RelationKind>;
     fn backup_to_commands(&self) -> Result<Vec<Command>>;
 }

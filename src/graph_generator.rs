@@ -104,8 +104,8 @@ impl<'a> FallibleIterator for GraphGenerator<'a> {
                     };
                     match thesis.content {
                         Content::Text(ref text) => {
-                            let node_body_text =
-                                self.wrap(&self.read_able_transaction.compose_with_aliases(text)?);
+                            let node_body_text = self
+                                .wrap(&self.read_able_transaction.compose_text_with_aliases(text)?);
                             let node_header = format!(
                                 r#"<TR><TD BORDER="1" SIDES="b">{node_header_text}</TD></TR>"#,
                             );

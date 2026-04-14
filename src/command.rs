@@ -8,6 +8,7 @@ use trove::DocumentId;
 use crate::alias::Alias;
 use crate::aliases_resolver::AliasesResolver;
 use crate::content::Content;
+use crate::read_transaction_methods::ReadTransactionMethods;
 use crate::reference::Reference;
 use crate::relation::Relation;
 use crate::relation_kind::RelationKind;
@@ -369,5 +370,80 @@ impl Command {
                 .collect::<Vec<_>>()
                 .join("\nand can not be parsed as ")
         ))
+    }
+
+    pub fn to_parsable(
+        &self,
+        read_able_transaction: &dyn ReadTransactionMethods,
+    ) -> Result<String> {
+        Ok(match self {
+            Command::AddTextThesisWithAlias { text, alias } => {
+                format!(
+                    "/may {} alias {}",
+                    alias.0,
+                    read_able_transaction.compose_text_with_aliases(text)?
+                )
+            }
+            Command::AddTextThesisWithoutAlias(text) => {
+                format!(
+                    "/may {}",
+                    read_able_transaction.compose_text_with_aliases(text)?
+                )
+            }
+            Command::AddRelationThesisWithAlias { relation, alias } => {
+                format!(
+                    "/may {} alias {}",
+                    alias.0,
+                    read_able_transaction.compose_relation_text_with_aliases(relation)?
+                )
+            }
+            Command::AddRelationThesisWithoutAlias(relation) => {
+                format!(
+                    "/may {}",
+                    read_able_transaction.compose_relation_text_with_aliases(relation)?
+                )
+            }
+            Command::SetAlias { thesis_id, alias } => {
+                format!(
+                    "/may {} alias {}",
+                    alias.0,
+                    if let Some(old_alias) =
+                        read_able_transaction.get_alias_by_thesis_id(thesis_id)?
+                    {
+                        old_alias.0
+                    } else {
+                        thesis_id.to_string()
+                    }
+                )
+            }
+            Command::AddTags { thesis_id, tags } => {
+                format!(
+                    "/may {} tag {}",
+                    tags.iter()
+                        .map(|tag| tag.0.clone())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    if let Some(alias) = read_able_transaction.get_alias_by_thesis_id(thesis_id)? {
+                        alias.0
+                    } else {
+                        thesis_id.to_string()
+                    }
+                )
+            }
+            Command::RemoveTags { thesis_id, tags } => {
+                format!(
+                    "/may {} not tag {}",
+                    tags.iter()
+                        .map(|tag| tag.0.clone())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    if let Some(alias) = read_able_transaction.get_alias_by_thesis_id(thesis_id)? {
+                        alias.0
+                    } else {
+                        thesis_id.to_string()
+                    }
+                )
+            }
+        })
     }
 }

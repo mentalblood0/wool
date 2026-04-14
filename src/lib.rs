@@ -209,7 +209,7 @@ macro_rules! define_sweater {
                         )))
                     }
 
-                    fn compose_with_aliases(
+                    fn compose_text_with_aliases(
                         &self,
                         text: &Text
                     ) -> Result<String> {
@@ -219,6 +219,21 @@ macro_rules! define_sweater {
                                     } else {
                                         reference.to_string()
                                     }))
+                    }
+
+                    fn compose_relation_text_with_aliases(
+                        &self,
+                        relation: &Relation
+                    ) -> Result<String> {
+                        Ok(format!("{} {} {}", if let Some(alias) = self.get_alias_by_thesis_id(&relation.from)? {
+                            alias.0
+                        } else {
+                            relation.from.to_string()
+                        }, relation.kind.0, if let Some(alias) = self.get_alias_by_thesis_id(&relation.to)? {
+                            alias.0
+                        } else {
+                            relation.to.to_string()
+                        }))
                     }
 
                     fn supported_relations_kinds(&self) -> BTreeSet<RelationKind> {
@@ -875,7 +890,19 @@ mod tests {
                         .join(""),
                 )?;
 
+                let mut aliases_resolver = LocalAliasesResolver {
+                    read_able_transaction: transaction,
+                    known_aliases: BTreeMap::new(),
+                };
                 for command in transaction.backup_to_commands()? {
+                    assert_eq!(
+                        command,
+                        Command::parse(
+                            &command.to_parsable(transaction)?,
+                            &mut aliases_resolver,
+                            &transaction.supported_relations_kinds()
+                        )?
+                    );
                     match command {
                         Command::AddTextThesisWithAlias { text, alias } => {
                             let content = Content::Text(text);
