@@ -5,7 +5,7 @@ use trove::DocumentId;
 use crate::bincode;
 use crate::relation_kind::RelationKind;
 
-#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, PartialEq, Eq, PartialOrd, Ord)]
 #[bincode(crate = "bincode")]
 pub struct Relation {
     pub from: DocumentId,

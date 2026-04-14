@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use trove::DocumentId;
 
@@ -7,30 +7,23 @@ use crate::relation::Relation;
 use crate::text::Text;
 use crate::xxhash_rust::xxh3::xxh3_128;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Content {
     Text(Text),
     Relation(Relation),
 }
 
 impl Content {
-    pub fn id(&self) -> Result<DocumentId> {
+    pub fn id(&self) -> DocumentId {
         let source = match self {
             Content::Text(text) => text.composed_raw().bytes().collect(),
             Content::Relation(relation) => {
-                bincode::encode_to_vec(relation, bincode::config::standard()).with_context(
-                    || {
-                        format!(
-                            "Can not binary encode Content {self:?} in order to compute it's \
-                             DocumentId as it's binary representation hash"
-                        )
-                    },
-                )?
+                bincode::encode_to_vec(relation, bincode::config::standard()).unwrap()
             }
         };
-        Ok(DocumentId {
+        DocumentId {
             value: xxh3_128(&source).to_be_bytes(),
-        })
+        }
     }
 
     pub fn validated(&self) -> Result<&Self> {

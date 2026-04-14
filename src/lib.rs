@@ -224,6 +224,37 @@ macro_rules! define_sweater {
                     fn supported_relations_kinds(&self) -> BTreeSet<RelationKind> {
                         self.sweater_config.supported_relations_kinds.clone()
                     }
+
+                    fn backup_to_commands(&self) -> Result<Vec<Command>> {
+                        let mut result = vec![];
+                        let mut already_got_theses_ids: BTreeSet<DocumentId> = BTreeSet::new();
+                        let mut stack: Vec<(Thesis, Vec<DocumentId>)> = vec![];
+                        let mut all_theses_iterator = self.iter_theses()?;
+                        while true {
+                            if let Some(thesis_and_references) = stack.last_mut() {
+                                if let Some(ref reference) = thesis_and_references.1.pop() {
+                                    let new_thesis = self.get_thesis(reference)?.unwrap();
+                                    let new_thesis_id = new_thesis.id();
+                                    if !already_got_theses_ids.contains(&new_thesis_id) {
+                                        already_got_theses_ids.insert(new_thesis_id);
+                                        let new_thesis_references = new_thesis.references();
+                                        stack.push((new_thesis, new_thesis_references));
+                                    }
+                                } else {
+                                    result.extend(thesis_and_references.0.to_commands());
+                                    stack.pop();
+                                }
+                            } else {
+                                if let Some(thesis) = all_theses_iterator.next()? {
+                                    let thesis_references = thesis.references();
+                                    stack.push((thesis, thesis_references));
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(result)
+                    }
                 };
             }
 
@@ -247,7 +278,7 @@ macro_rules! define_sweater {
 
             impl WriteTransaction<'_, '_, '_, '_> {
                 pub fn insert_thesis(&mut self, thesis: Thesis) -> Result<()> {
-                    let thesis_id = thesis.id()?;
+                    let thesis_id = thesis.id();
                     if self
                         .chest_transaction
                         .theses_contains_document_with_id(&thesis_id)?
@@ -503,10 +534,15 @@ mod tests {
 
     use {
         crate::{
-            aliases_resolver::AliasesResolver, command::Command, content::Content,
-            graph_generator::GraphGenerator, graph_generator::GraphGeneratorConfig,
-            read_transaction_methods::ReadTransactionMethods, relation::Relation, tag::Tag,
-            text::Text, thesis::Thesis,
+            aliases_resolver::AliasesResolver,
+            command::Command,
+            content::Content,
+            graph_generator::{GraphGenerator, GraphGeneratorConfig},
+            read_transaction_methods::ReadTransactionMethods,
+            relation::Relation,
+            tag::Tag,
+            text::Text,
+            thesis::Thesis,
         },
         fallible_iterator::FallibleIterator,
         nanorand::{Rng, WyRand},
@@ -674,7 +710,7 @@ mod tests {
                             let thesis = {
                                 let mut result =
                                     random_thesis(&mut rng, &previously_added_theses, &transaction);
-                                while previously_added_theses.contains_key(&result.id()?) {
+                                while previously_added_theses.contains_key(&result.id()) {
                                     result = random_thesis(
                                         &mut rng,
                                         &previously_added_theses,
@@ -699,7 +735,7 @@ mod tests {
                                     }
                                 }
                             }
-                            let thesis_id = thesis.id()?;
+                            let thesis_id = thesis.id();
                             assert_eq!(transaction.get_thesis(&thesis_id)?.unwrap(), thesis);
                             for referenced_thesis_id in thesis.references() {
                                 let where_referenced =
@@ -812,8 +848,8 @@ mod tests {
                     commands
                 };
                 serde_json::to_string(&commands)?;
-                for command in commands {
-                    transaction.execute_command(&command)?;
+                for command in commands.iter() {
+                    transaction.execute_command(command)?;
                 }
 
                 std::fs::write(
@@ -822,6 +858,21 @@ mod tests {
                         .collect::<Vec<_>>()?
                         .join(""),
                 )?;
+
+                for command in transaction.backup_to_commands()? {
+                    match command {
+                        Command::AddTextThesisWithAlias(thesis)
+                        | Command::AddTextThesisWithoutAlias(thesis)
+                        | Command::AddRelationThesisWithAlias(thesis)
+                        | Command::AddRelationThesisWithoutAlias(thesis) => {
+                            let mut thesis_in_sweater =
+                                transaction.get_thesis(&thesis.id())?.unwrap();
+                            thesis_in_sweater.tags.clear();
+                            assert_eq!(thesis_in_sweater, thesis)
+                        }
+                        _ => {}
+                    }
+                }
 
                 Ok(())
             })

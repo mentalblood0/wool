@@ -5,6 +5,7 @@ use fallible_iterator::FallibleIterator;
 use trove::DocumentId;
 
 use crate::alias::Alias;
+use crate::command::Command;
 use crate::relation_kind::RelationKind;
 use crate::tag::Tag;
 use crate::text::Text;
@@ -24,4 +25,5 @@ pub trait ReadTransactionMethods<'a> {
     fn iter_theses(&self) -> Result<Box<dyn FallibleIterator<Item = Thesis, Error = Error> + '_>>;
     fn compose_with_aliases(&self, text: &Text) -> Result<String>;
     fn supported_relations_kinds(&self) -> BTreeSet<RelationKind>;
+    fn backup_to_commands(&self) -> Result<Vec<Command>>;
 }

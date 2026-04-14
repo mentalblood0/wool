@@ -96,7 +96,7 @@ impl<'a> FallibleIterator for GraphGenerator<'a> {
             }
             Stage::Middle => {
                 if let Some(thesis) = self.theses_iterator.next()? {
-                    let thesis_id_string = thesis.id()?.to_string();
+                    let thesis_id_string = thesis.id().to_string();
                     let node_header_text = if let Some(ref alias) = thesis.alias {
                         html_escape::encode_text(&alias.0).to_string()
                     } else {

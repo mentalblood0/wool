@@ -14,7 +14,7 @@ use crate::relation_kind::RelationKind;
 use crate::tag::Tag;
 use crate::thesis::Thesis;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Command {
     AddTextThesisWithAlias(Thesis),
     AddTextThesisWithoutAlias(Thesis),
@@ -128,7 +128,7 @@ impl Command {
                 }),
                 tags: vec![],
             };
-            let id = thesis.id()?;
+            let id = thesis.id();
             let result = Self::AddRelationThesisWithAlias(thesis).validated()?;
             aliases_resolver.remember(alias, id);
             Ok(result)
@@ -198,7 +198,7 @@ impl Command {
                 content: Content::Text(aliases_resolver.new_text(&thesis_text_capture)?),
                 tags: vec![],
             };
-            aliases_resolver.remember(alias, thesis.id()?);
+            aliases_resolver.remember(alias, thesis.id());
             Self::AddTextThesisWithAlias(thesis).validated()
         } else {
             Err(anyhow!(

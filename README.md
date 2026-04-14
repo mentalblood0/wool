@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/mentalblood0/wool/actions/workflows/tests.yml/badge.svg)](https://github.com/mentalblood0/wool/actions/workflows/tests.yml)
 
-A Rust library for managing theses backed with [trove](https://github.com/mentalblood0/trove)
+Library for managing theses backed with [trove](https://github.com/mentalblood0/trove)
 
 Each thesis is either text or relation between two existing theses
 
@@ -19,9 +19,9 @@ Each thesis is either text or relation between two existing theses
 
 - optional **alias**
 - **tag**s
-- content: **text** or **relation**
+- **content**: **text** or **relation**
 
-**Thesis identifier** is 16 bytes fully determined by it's content (hash of text for text content and hash of binary representation of relation structure for relation content, hash function used is `xxhash128`) and represented in text and commands as url-safe non-padded base64 string, e.g. `ZqavF73LC9OQwCptOMUf1w`
+**Thesis identifier** is 16 bytes fully determined by it's **content** (hash of text for **text** content and hash of binary representation of relation structure for **relation** content, hash function used is `xxhash128`) and represented in text and commands as url-safe non-padded base64 string, e.g. `ZqavF73LC9OQwCptOMUf1w`
 
 #### Alias
 
@@ -49,7 +49,7 @@ Cyrillic/Latin text: letters, whitespaces and punctuation marks `,-:.'"`
 - **relation kind**
 - **thesis identifier** to which it is
 
-Supported relations kinds list is set in Sweater configuration file, e.g. see [`src/test_sweater_config.yml`](src/test_sweater_config.yml), so you can specify and use any relations kinds you like
+Supported **relations kind**s list is set in `Sweater` configuration file, e.g. see [`src/test_sweater_config.yml`](src/test_sweater_config.yml), so you can specify and use any **relations kind**s you like
 
 ##### Relation kind
 
@@ -67,10 +67,10 @@ Each command occupies one and only one line. See example [`here`](src/example.tx
 
 `/may ((A1.1.2)/(R-r)).3.1 alias R includes A` - add **thesis**-**relation** from `R` to `A` by **relation kind** `includes` **alias**ed by `((A1.1.2)/(R-r)).3.1`
 
-`/may total truth tag (R-r).0` - add tags `total` and `truth` to **thesis** with alias `(R-r).0`
+`/may total truth tag (R-r).0` - add **tag**s `total` and `truth` to **thesis** with **alias** `(R-r).0`
 
-`/may total truth not tag (R-r).0` - remove tags `total` and `truth` from **thesis** with alias `(R-r).0`
+`/may total truth not tag (R-r).0` - remove **tag**s `total` and `truth` from **thesis** with **alias** `(R-r).0`
 
-`/may (R-r).0 alias (R-r).0_lalala` - set **alias** `(R-r).0` for thesis with alias `(R-r).0_lalala`
+`/may (R-r).0 alias (R-r).0_lalala` - set **alias** `(R-r).0` for thesis with **alias** `(R-r).0_lalala`
 
-Thesis can have no alias or one alias, so setting alias for already aliased thesis will replace it's alias. Internally theses are reference and relate to each other using theses identifiers, so replacing aliases won't break anything
+**Thesis** can have no **alias** or one **alias**, so setting **alias** for already aliased thesis will replace it's **alias**. Internally **theses** are reference and relate to each other using **theses identifiers**, so replacing **aliase**s won't break anything
