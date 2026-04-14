@@ -12,14 +12,20 @@ use crate::reference::Reference;
 use crate::relation::Relation;
 use crate::relation_kind::RelationKind;
 use crate::tag::Tag;
-use crate::thesis::Thesis;
+use crate::text::Text;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Command {
-    AddTextThesisWithAlias(Thesis),
-    AddTextThesisWithoutAlias(Thesis),
-    AddRelationThesisWithAlias(Thesis),
-    AddRelationThesisWithoutAlias(Thesis),
+    AddTextThesisWithAlias {
+        text: Text,
+        alias: Alias,
+    },
+    AddTextThesisWithoutAlias(Text),
+    AddRelationThesisWithAlias {
+        relation: Relation,
+        alias: Alias,
+    },
+    AddRelationThesisWithoutAlias(Relation),
     SetAlias {
         thesis_id: DocumentId,
         alias: Alias,
@@ -37,14 +43,22 @@ pub enum Command {
 impl Command {
     pub fn validated(self) -> Result<Self> {
         match self {
-            Command::AddTextThesisWithAlias(ref thesis) => {
-                thesis.validated()?;
+            Command::AddTextThesisWithAlias {
+                ref text,
+                ref alias,
+            } => {
+                text.validated()?;
+                alias.validated()?;
             }
             Command::AddTextThesisWithoutAlias(ref thesis) => {
                 thesis.validated()?;
             }
-            Command::AddRelationThesisWithAlias(ref thesis) => {
-                thesis.validated()?;
+            Command::AddRelationThesisWithAlias {
+                ref relation,
+                ref alias,
+            } => {
+                relation.validated()?;
+                alias.validated()?;
             }
             Command::AddRelationThesisWithoutAlias(ref thesis) => {
                 thesis.validated()?;
@@ -117,20 +131,16 @@ impl Command {
                 return Err(anyhow!("Relation kind {relation_kind:?} is not supported"));
             }
             let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
-            let thesis = Thesis {
-                alias: Some(alias.clone()),
-                content: Content::Relation(Relation {
-                    from: aliases_resolver
-                        .get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
-                    kind: relation_kind,
-                    to: aliases_resolver
-                        .get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
-                }),
-                tags: vec![],
+            let relation = Relation {
+                from: aliases_resolver
+                    .get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
+                kind: relation_kind,
+                to: aliases_resolver
+                    .get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?,
             };
-            let id = thesis.id();
-            let result = Self::AddRelationThesisWithAlias(thesis).validated()?;
-            aliases_resolver.remember(alias, id);
+            let id = Content::Relation(relation.clone()).id();
+            aliases_resolver.remember(alias.clone(), id);
+            let result = Self::AddRelationThesisWithAlias { relation, alias }.validated()?;
             Ok(result)
         } else {
             Err(anyhow!(
@@ -160,15 +170,11 @@ impl Command {
             }
             let to = aliases_resolver
                 .get_thesis_id_by_reference(&Reference::new(to_reference_capture)?)?;
-            let result = Self::AddRelationThesisWithoutAlias(Thesis {
-                alias: None,
-                content: Content::Relation(Relation {
-                    from: aliases_resolver
-                        .get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
-                    kind: relation_kind,
-                    to: to.clone(),
-                }),
-                tags: vec![],
+            let result = Self::AddRelationThesisWithoutAlias(Relation {
+                from: aliases_resolver
+                    .get_thesis_id_by_reference(&Reference::new(from_reference_capture)?)?,
+                kind: relation_kind,
+                to: to.clone(),
             })
             .validated()?;
             Ok(result)
@@ -193,13 +199,9 @@ impl Command {
             let alias_capture = &captures[1];
             let thesis_text_capture = &captures[2];
             let alias = Alias(alias_capture.to_string()).validated()?.to_owned();
-            let thesis = Thesis {
-                alias: Some(alias.clone()),
-                content: Content::Text(aliases_resolver.new_text(&thesis_text_capture)?),
-                tags: vec![],
-            };
-            aliases_resolver.remember(alias, thesis.id());
-            Self::AddTextThesisWithAlias(thesis).validated()
+            let text = aliases_resolver.new_text(&thesis_text_capture)?;
+            aliases_resolver.remember(alias.clone(), Content::Text(text.clone()).id());
+            Self::AddTextThesisWithAlias { text, alias }.validated()
         } else {
             Err(anyhow!(
                 "Can not match {line:?} with regular expression {REGEX:?}"
@@ -219,12 +221,8 @@ impl Command {
         });
         if let Some(captures) = regex.captures(line) {
             let thesis_text_capture = &captures[1];
-            Self::AddTextThesisWithoutAlias(Thesis {
-                alias: None,
-                content: Content::Text(aliases_resolver.new_text(thesis_text_capture)?),
-                tags: vec![],
-            })
-            .validated()
+            Self::AddTextThesisWithoutAlias(aliases_resolver.new_text(thesis_text_capture)?)
+                .validated()
         } else {
             Err(anyhow!(
                 "Can not match {line:?} with regular expression {REGEX:?}"

@@ -409,13 +409,29 @@ macro_rules! define_sweater {
 
                 pub fn execute_command(&mut self, command: &Command) -> Result<()> {
                     match command {
-                        Command::AddTextThesisWithAlias(thesis) => self.insert_thesis(thesis.clone()),
-                        Command::AddTextThesisWithoutAlias(thesis) => self.insert_thesis(thesis.clone()),
-                        Command::AddRelationThesisWithAlias(thesis) => {
-                            self.insert_thesis(thesis.clone())
+                        Command::AddTextThesisWithAlias { text, alias } => self.insert_thesis(Thesis {
+                            alias: Some(alias.clone()),
+                            content: Content::Text(text.clone()),
+                            tags: vec![]
+                        }),
+                        Command::AddTextThesisWithoutAlias(text) => self.insert_thesis(Thesis {
+                            alias: None,
+                            content: Content::Text(text.clone()),
+                            tags: vec![]
+                        }),
+                        Command::AddRelationThesisWithAlias { relation, alias } => {
+                            self.insert_thesis(Thesis {
+                                alias: Some(alias.clone()),
+                                content: Content::Relation(relation.clone()),
+                                tags: vec![]
+                            })
                         }
-                        Command::AddRelationThesisWithoutAlias(thesis) => {
-                            self.insert_thesis(thesis.clone())
+                        Command::AddRelationThesisWithoutAlias(relation) => {
+                            self.insert_thesis(Thesis {
+                                alias: None,
+                                content: Content::Relation(relation.clone()),
+                                tags: vec![]
+                            })
                         }
                         Command::SetAlias { thesis_id, alias } => {
                             self.set_alias(thesis_id.clone(), alias.clone())
@@ -861,14 +877,27 @@ mod tests {
 
                 for command in transaction.backup_to_commands()? {
                     match command {
-                        Command::AddTextThesisWithAlias(thesis)
-                        | Command::AddTextThesisWithoutAlias(thesis)
-                        | Command::AddRelationThesisWithAlias(thesis)
-                        | Command::AddRelationThesisWithoutAlias(thesis) => {
-                            let mut thesis_in_sweater =
-                                transaction.get_thesis(&thesis.id())?.unwrap();
-                            thesis_in_sweater.tags.clear();
-                            assert_eq!(thesis_in_sweater, thesis)
+                        Command::AddTextThesisWithAlias { text, alias } => {
+                            let content = Content::Text(text);
+                            let thesis_in_sweater = transaction.get_thesis(&content.id())?.unwrap();
+                            assert_eq!(content, thesis_in_sweater.content);
+                            assert_eq!(Some(alias), thesis_in_sweater.alias);
+                        }
+                        Command::AddTextThesisWithoutAlias(text) => {
+                            let content = Content::Text(text);
+                            let thesis_in_sweater = transaction.get_thesis(&content.id())?.unwrap();
+                            assert_eq!(content, thesis_in_sweater.content);
+                        }
+                        Command::AddRelationThesisWithAlias { relation, alias } => {
+                            let content = Content::Relation(relation);
+                            let thesis_in_sweater = transaction.get_thesis(&content.id())?.unwrap();
+                            assert_eq!(content, thesis_in_sweater.content);
+                            assert_eq!(Some(alias), thesis_in_sweater.alias);
+                        }
+                        Command::AddRelationThesisWithoutAlias(relation) => {
+                            let content = Content::Relation(relation);
+                            let thesis_in_sweater = transaction.get_thesis(&content.id())?.unwrap();
+                            assert_eq!(content, thesis_in_sweater.content);
                         }
                         _ => {}
                     }

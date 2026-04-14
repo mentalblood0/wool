@@ -51,19 +51,20 @@ impl Thesis {
 
     pub fn to_commands(&self) -> Vec<Command> {
         let mut result = Vec::with_capacity(2);
-        let self_without_tags = Thesis {
-            content: self.content.clone(),
-            alias: self.alias.clone(),
-            tags: vec![],
-        };
         result.push(match self.content {
-            Content::Text(_) => match self.alias {
-                Some(_) => Command::AddTextThesisWithAlias(self_without_tags),
-                None => Command::AddTextThesisWithoutAlias(self_without_tags),
+            Content::Text(ref text) => match self.alias {
+                Some(ref alias) => Command::AddTextThesisWithAlias {
+                    text: text.clone(),
+                    alias: alias.clone(),
+                },
+                None => Command::AddTextThesisWithoutAlias(text.clone()),
             },
-            Content::Relation(_) => match self.alias {
-                Some(_) => Command::AddRelationThesisWithAlias(self_without_tags),
-                None => Command::AddRelationThesisWithoutAlias(self_without_tags),
+            Content::Relation(ref relation) => match self.alias {
+                Some(ref alias) => Command::AddRelationThesisWithAlias {
+                    relation: relation.clone(),
+                    alias: alias.clone(),
+                },
+                None => Command::AddRelationThesisWithoutAlias(relation.clone()),
             },
         });
         if !self.tags.is_empty() {
