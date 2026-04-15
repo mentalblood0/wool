@@ -303,6 +303,14 @@ impl Command {
                 errors.push(("set alias", error));
             }
         }
+        match Self::parse_as_add_tags(line, aliases_resolver) {
+            Ok(result) => {
+                return Ok(result);
+            }
+            Err(error) => {
+                errors.push(("add tags", error));
+            }
+        }
         match Self::parse_as_add_relation_thesis_with_alias(
             line,
             aliases_resolver,
@@ -341,14 +349,6 @@ impl Command {
             }
             Err(error) => {
                 errors.push(("add text thesis without alias", error));
-            }
-        }
-        match Self::parse_as_add_tags(line, aliases_resolver) {
-            Ok(result) => {
-                return Ok(result);
-            }
-            Err(error) => {
-                errors.push(("add tags", error));
             }
         }
         match Self::parse_as_remove_tags(line, aliases_resolver) {

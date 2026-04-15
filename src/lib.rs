@@ -659,7 +659,6 @@ mod tests {
         }) as Box<dyn AliasesResolver>;
         let result = aliases_resolver.new_text(&result_string).unwrap();
         assert_eq!(result.composed_raw(), result_string);
-        println!("random text {:?}", result_string);
         result
     }
 
@@ -854,6 +853,9 @@ mod tests {
                 for (thesis_id, thesis) in previously_added_theses.iter() {
                     assert_eq!(transaction.get_thesis(thesis_id)?.unwrap(), *thesis);
                 }
+                for thesis in transaction.iter_theses()?.collect::<Vec<_>>()?.iter() {
+                    assert_eq!(previously_added_theses.get(&thesis.id()), Some(thesis));
+                }
                 Ok(())
             })
             .unwrap();
@@ -871,11 +873,12 @@ mod tests {
                     };
                     let mut commands = vec![];
                     for line in std::fs::read_to_string("src/example.txt")?.lines() {
-                        commands.push(Command::parse(
+                        let command = Command::parse(
                             line,
                             &mut aliases_resolver,
                             &transaction.sweater_config.supported_relations_kinds,
-                        )?);
+                        )?;
+                        commands.push(command);
                     }
                     commands
                 };
