@@ -9,6 +9,7 @@ Each thesis is either text or relation between two existing theses
 ## Features
 
 - tagging
+- search by text entities (words, references)
 - aliasing
 - plain text commands processing
 - graph generation
