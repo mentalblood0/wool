@@ -20,7 +20,7 @@ impl RelationKind {
             Ok(self)
         } else {
             Err(anyhow!(
-                "Relation kind must be an English words sequence without punctuation, so {:?} \
+                "Relation kind should be an English words sequence without punctuation, so {:?} \
                  does not seem to be relation kind",
                 self.0
             ))

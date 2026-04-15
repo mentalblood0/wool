@@ -17,7 +17,7 @@ impl Alias {
             Ok(self)
         } else {
             Err(anyhow!(
-                "Alias must be sequence of one or more non-whitespace characters except '[' and \
+                "Alias should be sequence of one or more non-whitespace characters except '[' and \
                  ']', so {:?} does not seem to be alias",
                 self.0
             ))

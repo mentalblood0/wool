@@ -7,7 +7,7 @@ use crate::command::Command;
 use crate::content::Content;
 use crate::relation::Relation;
 use crate::tag::Tag;
-use crate::text::Text;
+use crate::text::{Entity, Text};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Thesis {
@@ -36,11 +36,18 @@ impl Thesis {
 
     pub fn references(&self) -> Vec<DocumentId> {
         match self.content {
-            Content::Text(Text {
-                raw_text_parts: _,
-                ref references,
-                start_with_reference: _,
-            }) => references.clone(),
+            Content::Text(Text { ref entities }) => {
+                let mut result = vec![];
+                for entity in entities.iter() {
+                    match entity {
+                        Entity::Reference(referenced_thesis_id) => {
+                            result.push(referenced_thesis_id.clone())
+                        }
+                        _ => {}
+                    }
+                }
+                result
+            }
             Content::Relation(Relation {
                 ref from,
                 ref to,

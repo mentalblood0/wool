@@ -34,7 +34,7 @@ macro_rules! define_sweater {
             use {
                 std::collections::{BTreeSet, BTreeMap},
                 $crate::{
-                    text::{Text, RawText}, alias::Alias, reference::Reference, relation::Relation,
+                    text::{Text, Entity}, alias::Alias, reference::Reference, relation::Relation,
                     relation_kind::RelationKind, tag::Tag, content::Content, thesis::Thesis,
                     aliases_resolver::AliasesResolver, command::Command, read_transaction_methods::ReadTransactionMethods,
                     trove::{define_chest, path_segments, search_path_segments, DocumentId},
@@ -144,6 +144,30 @@ macro_rules! define_sweater {
                             )
                     }
 
+                    fn iter_theses_ids_by_entities(
+                        &self,
+                        present_entities: &Vec<Entity>,
+                        absent_entities: &Vec<Entity>,
+                        start_after_thesis_id: Option<DocumentId>
+                    ) -> Result<Box<dyn FallibleIterator<Item = DocumentId, Error = Error> + '_>> {
+                        self.chest_transaction
+                            .theses_select(
+                                &fallible_iterator::convert(
+                                    present_entities.iter().map(|entity| serde_json::to_value(entity))
+                                ).map(|entity_json_value| Ok((
+                                    search_path_segments!("content", "Text", "entities", ()),
+                                    entity_json_value
+                                ))).collect()?,
+                                &fallible_iterator::convert(
+                                    absent_entities.iter().map(|entity| serde_json::to_value(entity))
+                                ).map(|entity_json_value| Ok((
+                                    search_path_segments!("content", "Text", "entities", ()),
+                                    entity_json_value
+                                ))).collect()?,
+                                start_after_thesis_id,
+                            )
+                    }
+
                     fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>> {
                         Ok(self
                             .chest_transaction
@@ -163,8 +187,8 @@ macro_rules! define_sweater {
                         self.chest_transaction
                             .theses_select(
                                 &vec![(
-                                    search_path_segments!("content", "Text", "references", ()),
-                                    json_value.clone(),
+                                    search_path_segments!("content", "Text", "entities", ()),
+                                    serde_json::to_value(Entity::Reference(thesis_id.clone()))?
                                 )],
                                 &vec![],
                                 None,
@@ -490,66 +514,42 @@ macro_rules! define_sweater {
                 fn new_text(&self, input: &str) -> Result<Text> {
                     static REFERENCE_IN_TEXT_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
                     let reference_in_text_regex = REFERENCE_IN_TEXT_REGEX.get_or_init(|| {
-                        Regex::new(r#"\[(:?([A-Za-z0-9-_]{22})|([^\[\]]+))\]"#)
+                        Regex::new(r#"(?<word>[\p{Script=Cyrillic}\p{Script=Latin}]+)|(:?\[(:?(?<id>[A-Za-z0-9-_]{22})|(?<alias>[^\[\]]+))\])|(?<other>[\d\s:,\.!\?\-'"]+)"#)
                             .with_context(|| {
-                                "Can not compile regular expression to split text on raw text parts and \
-                                 references"
+                                "Can not compile regular expression to split text into entities"
                             })
                             .unwrap()
                     });
 
-                    let mut result = Text {
-                        raw_text_parts: Vec::new(),
-                        references: Vec::new(),
-                        start_with_reference: false,
-                    };
-                    let mut last_match_end = 0;
-                    for reference_match in reference_in_text_regex.captures_iter(input) {
-                        let full_reference_match = reference_match.get(0).unwrap();
-                        if full_reference_match.start() == 0 {
-                            result.start_with_reference = true;
-                        }
-                        let text_before = &input[last_match_end..full_reference_match.start()];
-                        if !text_before.is_empty() {
-                            result.raw_text_parts.push(RawText(text_before.to_string()));
-                        }
-                        if let Some(thesis_id_string) = reference_match
-                            .get(2)
-                            .map(|thesis_id_string_match| thesis_id_string_match.as_str())
-                        {
-                            result.references.push(
-                                serde_json::from_value(serde_json::Value::String(thesis_id_string.to_string()))
+                    let mut entities = vec![];
+                    for entity_match in reference_in_text_regex.captures_iter(input) {
+                        if let Some(word_match) = entity_match.name("word") {
+                            entities.push(Entity::Word(word_match.as_str().to_string()));
+                        } else if let Some(id_match) = entity_match.name("id") {
+                            entities.push(Entity::Reference(
+                                serde_json::from_value(serde_json::Value::String(id_match.as_str().to_string()))
                                     .unwrap(),
-                            );
-                        } else if let Some(alias_string) = reference_match
-                            .get(3)
-                            .map(|alias_string_match| alias_string_match.as_str())
-                        {
-                            result.references.push(
+                            ));
+                        } else if let Some(alias_match) = entity_match.name("alias") {
+                            let alias_string = alias_match.as_str().to_string();
+                            entities.push(Entity::Reference(
                                 self
                                     .get_thesis_id_by_reference(&Reference::Alias(Alias(
                                         alias_string.to_string(),
                                     ).validated()?.to_owned()))
                                     .with_context(|| {
                                         anyhow!(
-                                            "Can not parse text {:?} with alias {:?} because do not know such \
-                                             alias",
+                                            "Can not parse text {:?} with alias {:?} because do not know such alias",
                                             input,
                                             alias_string
                                         )
                                     })?,
-                            );
-                        }
-                        last_match_end = full_reference_match.end();
-                    }
-                    if last_match_end < input.len() {
-                        let remaining = &input[last_match_end..];
-                        if !remaining.is_empty() {
-                            result.raw_text_parts.push(RawText(remaining.to_string()));
+                            ));
+                        } else if let Some(other_match) = entity_match.name("other") {
+                            entities.push(Entity::Other(other_match.as_str().to_string()));
                         }
                     }
-
-                    Ok(result)
+                    Ok(Text { entities })
                 }
             }
         }
@@ -659,6 +659,7 @@ mod tests {
         }) as Box<dyn AliasesResolver>;
         let result = aliases_resolver.new_text(&result_string).unwrap();
         assert_eq!(result.composed_raw(), result_string);
+        println!("random text {:?}", result_string);
         result
     }
 

@@ -4,35 +4,15 @@ use serde::{Deserialize, Serialize};
 use trove::DocumentId;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RawText(pub String);
-
-impl RawText {
-    pub fn validated(&self) -> Result<&Self> {
-        static RAW_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-        let sentence_regex = RAW_REGEX.get_or_init(|| {
-            Regex::new(r#"^[0-9\p{Script=Cyrillic}\p{Script=Latin}\s,\-\:\."']+$"#)
-                .with_context(|| "Can not compile regular expression for text validation")
-                .unwrap()
-        });
-        if sentence_regex.is_match(&self.0) {
-            Ok(self)
-        } else {
-            Err(anyhow!(
-                "Text part around references must be Cyrillic/Latin text: letters, whitespaces, \
-                 punctuation ,-:.'\", so {:?} does not seem to be text part",
-                self.0
-            ))
-        }
-    }
+pub struct Text {
+    pub entities: Vec<Entity>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Text {
-    #[serde(default)]
-    pub raw_text_parts: Vec<RawText>,
-    #[serde(default)]
-    pub references: Vec<DocumentId>,
-    pub start_with_reference: bool,
+pub enum Entity {
+    Word(String),
+    Reference(DocumentId),
+    Other(String),
 }
 
 impl<'a> Text {
@@ -40,26 +20,18 @@ impl<'a> Text {
     where
         F: Fn(&DocumentId) -> Result<String>,
     {
-        let mut result_list = Vec::new();
-        if self.start_with_reference {
-            for (reference_index, reference) in self.references.iter().enumerate() {
-                result_list.push(format!("[{}]", format_reference(reference)?));
-                if reference_index < self.raw_text_parts.len() {
-                    result_list.push(self.raw_text_parts[reference_index].0.clone());
+        let mut result = String::new();
+        for entity in self.entities.iter() {
+            match entity {
+                Entity::Word(word) | Entity::Other(word) => {
+                    result.push_str(&word);
                 }
-            }
-        } else {
-            for (part_index, part) in self.raw_text_parts.iter().enumerate() {
-                result_list.push(part.0.clone());
-                if part_index < self.references.len() {
-                    result_list.push(format!(
-                        "[{}]",
-                        format_reference(&self.references[part_index])?
-                    ));
+                Entity::Reference(thesis_id) => {
+                    result.push_str(&format!("[{}]", &format_reference(&thesis_id)?));
                 }
             }
         }
-        Ok(result_list.concat())
+        Ok(result)
     }
 
     pub fn composed_raw(&self) -> String {
@@ -74,8 +46,27 @@ impl<'a> Text {
     }
 
     pub fn validated(&self) -> Result<&Self> {
-        for part in self.raw_text_parts.iter() {
-            part.validated()?;
+        for entity in self.entities.iter() {
+            match entity {
+                Entity::Word(word) => {
+                    static REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+                    let sentence_regex = REGEX.get_or_init(|| {
+                        Regex::new(r#"^[\p{Script=Cyrillic}\p{Script=Latin}]+$"#)
+                            .with_context(|| {
+                                "Can not compile regular expression for word validation"
+                            })
+                            .unwrap()
+                    });
+                    if !sentence_regex.is_match(&word) {
+                        return Err(anyhow!(
+                            "Word should be one or more Cyrillic/Latin letters, so {word:?} does \
+                             not seem to be a word"
+                        ));
+                    }
+                }
+                Entity::Reference(_) => {}
+                Entity::Other(_) => {}
+            }
         }
         Ok(self)
     }

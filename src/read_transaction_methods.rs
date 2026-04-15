@@ -9,7 +9,7 @@ use crate::command::Command;
 use crate::relation::Relation;
 use crate::relation_kind::RelationKind;
 use crate::tag::Tag;
-use crate::text::Text;
+use crate::text::{Entity, Text};
 use crate::thesis::Thesis;
 
 pub trait ReadTransactionMethods<'a> {
@@ -18,6 +18,12 @@ pub trait ReadTransactionMethods<'a> {
         &self,
         present_tags: &Vec<Tag>,
         absent_tags: &Vec<Tag>,
+        start_after_thesis_id: Option<DocumentId>,
+    ) -> Result<Box<dyn FallibleIterator<Item = DocumentId, Error = Error> + '_>>;
+    fn iter_theses_ids_by_entities(
+        &self,
+        present_entities: &Vec<Entity>,
+        absent_entities: &Vec<Entity>,
         start_after_thesis_id: Option<DocumentId>,
     ) -> Result<Box<dyn FallibleIterator<Item = DocumentId, Error = Error> + '_>>;
     fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>>;
