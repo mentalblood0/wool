@@ -77,11 +77,11 @@ macro_rules! define_sweater {
                                 config.chest
                             )
                         })?,
-                        config: config,
+                        config,
                     })
                 }
 
-                pub fn lock_all_and_write<'a, F, R>(&'a mut self, mut f: F) -> Result<R>
+                pub fn lock_all_and_write<F, R>(&mut self, mut f: F) -> Result<R>
                 where
                     F: FnMut(&mut WriteTransaction<'_, '_, '_, '_>) -> Result<R>,
                 {
@@ -169,7 +169,7 @@ macro_rules! define_sweater {
                     }
 
                     fn get_thesis_id_by_alias(&self, alias: &Alias) -> Result<Option<DocumentId>> {
-                        Ok(self
+                        self
                             .chest_transaction
                             .theses_select(
                                 &vec![(
@@ -179,7 +179,7 @@ macro_rules! define_sweater {
                                 &vec![],
                                 None,
                             )?
-                            .next()?)
+                            .next()
                     }
 
                     fn where_referenced(&self, thesis_id: &DocumentId) -> Result<Vec<DocumentId>> {
@@ -637,7 +637,6 @@ mod tests {
                         .unwrap()
                         .as_str()
                         .unwrap()
-                        .to_string()
                     )
                 }
             })
@@ -718,7 +717,7 @@ mod tests {
                     }
                 }
             },
-            tags: tags,
+            tags,
         }
     }
 
@@ -740,12 +739,12 @@ mod tests {
                         1 => {
                             let thesis = {
                                 let mut result =
-                                    random_thesis(&mut rng, &previously_added_theses, &transaction);
+                                    random_thesis(&mut rng, &previously_added_theses, transaction);
                                 while previously_added_theses.contains_key(&result.id()) {
                                     result = random_thesis(
                                         &mut rng,
                                         &previously_added_theses,
-                                        &transaction,
+                                        transaction,
                                     );
                                 }
                                 result
@@ -762,7 +761,7 @@ mod tests {
                                     let thesis_with_such_tags =
                                         transaction.get_thesis(&thesis_with_such_tags_id)?.unwrap();
                                     for tag in taken_tags.iter() {
-                                        assert!(thesis_with_such_tags.tags.contains(&tag));
+                                        assert!(thesis_with_such_tags.tags.contains(tag));
                                     }
                                 }
                             }
@@ -796,11 +795,13 @@ mod tests {
                             };
                             println!("tag {:?} with {:?}", thesis_to_tag_id, tag_to_add);
                             transaction.add_tags(&thesis_to_tag_id, [tag_to_add.clone()].into())?;
-                            assert!(transaction
-                                .get_thesis(&thesis_to_tag_id)?
-                                .unwrap()
-                                .tags
-                                .contains(&tag_to_add));
+                            assert!(
+                                transaction
+                                    .get_thesis(&thesis_to_tag_id)?
+                                    .unwrap()
+                                    .tags
+                                    .contains(&tag_to_add)
+                            );
                             previously_added_theses
                                 .get_mut(&thesis_to_tag_id)
                                 .unwrap()
@@ -831,11 +832,13 @@ mod tests {
                                     &thesis_to_untag_id,
                                     &[tag_to_remove.clone()].into(),
                                 )?;
-                                assert!(!transaction
-                                    .get_thesis(&thesis_to_untag_id)?
-                                    .unwrap()
-                                    .tags
-                                    .contains(&tag_to_remove));
+                                assert!(
+                                    !transaction
+                                        .get_thesis(&thesis_to_untag_id)?
+                                        .unwrap()
+                                        .tags
+                                        .contains(&tag_to_remove)
+                                );
                                 previously_added_theses
                                     .get_mut(&thesis_to_untag_id)
                                     .unwrap()
